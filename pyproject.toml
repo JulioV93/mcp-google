@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mcp-google"
+version = "0.1.0"
+description = "Multi-user MCP server for Google Calendar, Tasks, and Gmail"
+readme = "docs/README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "alembic>=1.14.0",
+  "fastmcp>=2.10.0",
+  "google-api-python-client>=2.169.0",
+  "google-auth>=2.40.0",
+  "google-auth-oauthlib>=1.2.2",
+  "pydantic>=2.11.0",
+  "pydantic-settings>=2.6.0",
+  "psycopg[binary]>=3.2.3",
+  "pyjwt[crypto]>=2.10.1",
+  "sqlalchemy>=2.0.36",
+  "starlette>=0.41.0",
+  "uvicorn>=0.32.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "pytest-asyncio>=0.24.0",
+  "ruff>=0.8.0",
+]
+
+[project.scripts]
+mcp-google-server = "app.main:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

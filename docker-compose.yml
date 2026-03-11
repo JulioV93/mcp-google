@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: mcp-google-postgres
+    environment:
+      POSTGRES_DB: mcp_google
+      POSTGRES_USER: mcp_google
+      POSTGRES_PASSWORD: mcp_google
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mcp_google -d mcp_google"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mcp-google:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mcp-google-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://mcp_google:mcp_google@postgres:5432/mcp_google
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+    ports:
+      - "8000:8000"
+    command: ["python", "-m", "app.main"]
+
+volumes:
+  postgres_data:
