@@ -1,6 +1,6 @@
 # MCP Google Server
 
-Servidor MCP remoto en Python para integrar Google Calendar, Google Tasks y Gmail en flujos de agentes multiusuario.
+Servidor MCP remoto en Python para integrar Google Calendar, Google Tasks, Gmail y Google Drive en flujos de agentes multiusuario.
 
 ## Stack
 
@@ -20,6 +20,7 @@ Servidor MCP remoto en Python para integrar Google Calendar, Google Tasks y Gmai
 - CRUD para Calendar
 - CRUD para Tasks
 - lectura, drafts, envio y borrado para Gmail
+- navegacion, lectura, exportacion, permisos y operaciones confirmadas para Drive
 - auditoria basica
 - rate limiting basico
 - aprobacion explicita opcional para tools sensibles
@@ -97,6 +98,11 @@ Esto levanta:
 - `docs/06-guia-desarrollo-local.md`
 - `docs/07-despliegue-y-pruebas-e2e.md`
 - `docs/02-autenticacion-y-seguridad.md`
+- `docs/13-guia-conectar-mcp-a-opencode.md`
+- `docs/14-guia-reaccion-del-agente-ante-errores-mcp.md`
+- `docs/15-tabla-reaccion-agente-errores-mcp.md`
+- `docs/16-system-prompt-opencode-errores-mcp.md`
+- `docs/17-reglas-automaticas-agente-errores-mcp.yaml`
 
 ## Tests
 

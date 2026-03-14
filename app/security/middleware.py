@@ -2,11 +2,11 @@ import logging
 
 from starlette.requests import HTTPConnection
 from starlette.responses import JSONResponse
-from starlette.types import ASGIApp, Message, Receive, Scope, Send
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.config import get_settings
 from app.context.request_context import reset_request_context, set_request_context
-from app.errors import OriginNotAllowedError
+from app.errors import OriginNotAllowedError, RateLimitedError, UnauthorizedError
 from app.security.jwt_auth import JWTAuthenticationError, authenticate_request
 from app.security.rate_limit import InMemoryRateLimiter, RateLimitExceededError
 
@@ -31,7 +31,7 @@ class JWTAuthMiddleware:
         try:
             self._validate_origin(conn, path)
         except OriginNotAllowedError as exc:
-            response = JSONResponse({"error": exc.code, "detail": exc.detail}, status_code=403)
+            response = JSONResponse(exc.to_dict(), status_code=exc.status_code)
             await response(scope, receive, send)
             return
 
@@ -43,7 +43,8 @@ class JWTAuthMiddleware:
             principal = authenticate_request(conn, self.settings)
         except JWTAuthenticationError as exc:
             logger.info("Rejected MCP request: %s", exc)
-            response = JSONResponse({"error": "unauthorized_client", "detail": str(exc)}, status_code=401)
+            error = UnauthorizedError(str(exc))
+            response = JSONResponse(error.to_dict(), status_code=error.status_code)
             await response(scope, receive, send)
             return
 
@@ -51,7 +52,8 @@ class JWTAuthMiddleware:
             try:
                 self.rate_limiter.check(principal.context.subject)
             except RateLimitExceededError as exc:
-                response = JSONResponse({"error": "rate_limited", "detail": str(exc)}, status_code=429)
+                error = RateLimitedError(str(exc))
+                response = JSONResponse(error.to_dict(), status_code=error.status_code)
                 await response(scope, receive, send)
                 return
 

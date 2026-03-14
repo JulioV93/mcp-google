@@ -89,11 +89,14 @@
 
 - crea un evento
 - valida horarios, timezone y estructura minima
+- soporta `recurrence` en formato RRULE de Google Calendar
+- soporta `reminders.useDefault` y `reminders.overrides`
 
 ### `calendar_update_event`
 
 - actualiza un evento existente
 - preferible con semantica de patch en v1
+- permite actualizar recurrencia y recordatorios personalizados
 
 ### `calendar_delete_event`
 
@@ -136,11 +139,43 @@
 - `gmail_send_email`
 - `gmail_delete_message`
 
+## Tools MCP de Google Drive
+
+### Lectura
+
+- `drive_list_files`
+- `drive_search_files`
+- `drive_get_file`
+- `drive_list_permissions`
+- `drive_download_file`
+- `drive_export_file`
+
+### Mutacion simple
+
+- `drive_create_folder`
+- `drive_create_shortcut`
+- `drive_update_metadata`
+- `drive_move_file`
+
+### Mutacion sensible con doble validacion
+
+- `drive_prepare_upload`
+- `drive_confirm_upload`
+- `drive_prepare_save_file`
+- `drive_confirm_save_file`
+- `drive_prepare_delete_file`
+- `drive_confirm_delete_file`
+- `drive_prepare_share_file`
+- `drive_confirm_share_file`
+- `drive_prepare_revoke_permission`
+- `drive_confirm_revoke_permission`
+
 ## Notas de modelado Gmail
 
 - Gmail no debe tratarse como CRUD puro sobre mensajes ya existentes.
 - En v1, la entidad editable principal es el draft.
 - El envio se trata como accion separada.
+- `gmail_delete_message` en v1 envia el mensaje a la papelera; no realiza borrado permanente.
 - El borrado debe auditarse de forma reforzada.
 
 ## Normalizacion de respuestas

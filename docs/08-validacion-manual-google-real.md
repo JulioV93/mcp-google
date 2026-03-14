@@ -31,9 +31,11 @@ TOKEN_ENCRYPTION_KEY=<fernet-key>
 GOOGLE_CLIENT_ID=<real-client-id>
 GOOGLE_CLIENT_SECRET=<real-client-secret>
 GOOGLE_REDIRECT_URI=http://localhost:8000/oauth/google/callback
+GOOGLE_OAUTH_SCOPES=https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/tasks,https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.compose,https://www.googleapis.com/auth/gmail.modify,openid,https://www.googleapis.com/auth/userinfo.email,https://www.googleapis.com/auth/userinfo.profile
 JWT_TEST_MODE=true
 JWT_TEST_TOKEN=local-dev-token
 JWT_TEST_SUBJECT=manual-test-user
+REQUIRE_EXPLICIT_APPROVAL=false
 ```
 
 ## Paso 1: levantar el servidor
@@ -41,17 +43,18 @@ JWT_TEST_SUBJECT=manual-test-user
 Con Python local:
 
 ```bash
-source .venv/bin/activate
-alembic upgrade head
-python -m app.main
+.venv/bin/python -m alembic upgrade head
+.venv/bin/python -m app.main
 ```
 
 O con Docker Compose:
 
 ```bash
-docker compose up --build
 docker compose run --rm mcp-google alembic upgrade head
+docker compose up --build
 ```
+
+Si cambias `.env` o cualquier setting de OAuth, reinicia el servidor antes de repetir la prueba.
 
 ## Paso 2: verificar salud y autenticacion basica
 
@@ -67,6 +70,20 @@ Prueba MCP basica con el helper:
 
 Debes ver el listado de tools disponibles.
 
+Comprobaciones utiles adicionales:
+
+Sin token debe fallar:
+
+```bash
+curl -i http://localhost:8000/oauth/google/status
+```
+
+Con token de prueba debe responder:
+
+```bash
+curl -H "Authorization: Bearer local-dev-token" http://localhost:8000/oauth/google/status
+```
+
 ## Paso 3: iniciar el flujo Google OAuth
 
 ```bash
@@ -80,6 +97,12 @@ La respuesta devolvera un JSON con:
 - `expires_at`
 - `scopes`
 
+Tambien puedes iniciar el flujo desde la tool MCP:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py --tool auth_google_begin
+```
+
 ## Paso 4: completar consentimiento en navegador
 
 1. copia `authorization_url`
@@ -92,6 +115,12 @@ La respuesta devolvera un JSON con:
 
 ```bash
 curl -H "Authorization: Bearer local-dev-token" http://localhost:8000/oauth/google/status
+```
+
+Verificacion equivalente desde MCP:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py --tool auth_google_status
 ```
 
 Respuesta esperada aproximada:
@@ -129,9 +158,112 @@ Crear un evento:
   }'
 ```
 
-Verifica luego con `calendar_list_events` y borra con `calendar_delete_event`.
+Crear un evento recurrente diario con recordatorio personalizado 5 minutos antes:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool calendar_create_event \
+  --args '{
+    "calendar_id": "primary",
+    "event": {
+      "summary": "Rutina diaria MCP",
+      "start": {"dateTime": "2026-03-20T08:00:00-03:00"},
+      "end": {"dateTime": "2026-03-20T08:10:00-03:00"},
+      "recurrence": ["RRULE:FREQ=DAILY"],
+      "reminders": {
+        "useDefault": false,
+        "overrides": [
+          {"method": "popup", "minutes": 5}
+        ]
+      }
+    }
+  }'
+```
+
+Anota el `event_id` que devuelve la creacion.
+
+Listar eventos:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool calendar_list_events \
+  --args '{
+    "calendar_id": "primary",
+    "query": "MCP Test Event"
+  }'
+```
+
+Obtener el evento por ID:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool calendar_get_event \
+  --args '{
+    "calendar_id": "primary",
+    "event_id": "<event_id>"
+  }'
+```
+
+Actualizar el evento:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool calendar_update_event \
+  --args '{
+    "calendar_id": "primary",
+    "event_id": "<event_id>",
+    "event": {
+      "summary": "MCP Test Event Updated",
+      "start": {"dateTime": "2026-03-20T15:00:00Z"},
+      "end": {"dateTime": "2026-03-20T16:00:00Z"}
+    }
+  }'
+```
+
+Actualizar un evento para dejarlo recurrente con recordatorio personalizado:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool calendar_update_event \
+  --args '{
+    "calendar_id": "primary",
+    "event_id": "<event_id>",
+    "event": {
+      "summary": "Rutina diaria MCP actualizada",
+      "start": {"dateTime": "2026-03-20T08:00:00-03:00"},
+      "end": {"dateTime": "2026-03-20T08:10:00-03:00"},
+      "recurrence": ["RRULE:FREQ=DAILY"],
+      "reminders": {
+        "useDefault": false,
+        "overrides": [
+          {"method": "popup", "minutes": 5}
+        ]
+      }
+    }
+  }'
+```
+
+En la respuesta o al consultar luego con `calendar_get_event`, verifica que aparezcan `recurrence` y `reminders`.
+
+Borrar el evento:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool calendar_delete_event \
+  --args '{
+    "calendar_id": "primary",
+    "event_id": "<event_id>"
+  }'
+```
 
 ## Paso 7: probar Tasks
+
+Listar listas actuales:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool tasks_list_tasklists
+```
 
 Crear lista:
 
@@ -139,6 +271,26 @@ Crear lista:
 .venv/bin/python scripts/mcp_smoke_test.py \
   --tool tasks_create_tasklist \
   --args '{"title": "MCP Test List"}'
+```
+
+Anota el `tasklist_id` que devuelve la creacion.
+
+Actualizar lista:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool tasks_update_tasklist \
+  --args '{
+    "tasklist_id": "<tasklist_id>",
+    "title": "MCP Test List Updated"
+  }'
+```
+
+Listar listas nuevamente:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool tasks_list_tasklists
 ```
 
 Crear tarea:
@@ -152,7 +304,64 @@ Crear tarea:
   }'
 ```
 
-Completa con `tasks_complete_task` y borra con `tasks_delete_task`.
+Anota el `task_id` que devuelve la creacion.
+
+Listar tareas:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool tasks_list_tasks \
+  --args '{
+    "tasklist_id": "<tasklist_id>"
+  }'
+```
+
+Actualizar tarea:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool tasks_update_task \
+  --args '{
+    "tasklist_id": "<tasklist_id>",
+    "task_id": "<task_id>",
+    "task": {
+      "title": "MCP Test Task Updated",
+      "notes": "Smoke test updated"
+    }
+  }'
+```
+
+Completar tarea:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool tasks_complete_task \
+  --args '{
+    "tasklist_id": "<tasklist_id>",
+    "task_id": "<task_id>"
+  }'
+```
+
+Borrar tarea:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool tasks_delete_task \
+  --args '{
+    "tasklist_id": "<tasklist_id>",
+    "task_id": "<task_id>"
+  }'
+```
+
+Borrar lista:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool tasks_delete_tasklist \
+  --args '{
+    "tasklist_id": "<tasklist_id>"
+  }'
+```
 
 ## Paso 8: probar Gmail
 
@@ -160,7 +369,32 @@ Listar mensajes:
 
 ```bash
 .venv/bin/python scripts/mcp_smoke_test.py \
-  --tool gmail_list_messages
+  --tool gmail_list_messages \
+  --args '{
+    "max_results": 5
+  }'
+```
+
+Anota un `message_id` real de la respuesta si quieres probar lectura o borrado.
+
+Obtener un mensaje:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool gmail_get_message \
+  --args '{
+    "message_id": "<message_id>"
+  }'
+```
+
+Listar hilos:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool gmail_list_threads \
+  --args '{
+    "max_results": 5
+  }'
 ```
 
 Crear draft:
@@ -177,7 +411,58 @@ Crear draft:
   }'
 ```
 
-Opcionalmente, enviar correo con `gmail_send_email`.
+Anota el `draft_id` que devuelve la creacion.
+
+Actualizar draft:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool gmail_update_draft \
+  --args '{
+    "draft_id": "<draft_id>",
+    "message": {
+      "to": ["tu-correo@example.com"],
+      "subject": "Draft de prueba MCP actualizado",
+      "body_text": "Mensaje de prueba actualizado"
+    }
+  }'
+```
+
+Borrar draft:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool gmail_delete_draft \
+  --args '{
+    "draft_id": "<draft_id>"
+  }'
+```
+
+Enviar correo opcionalmente:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool gmail_send_email \
+  --args '{
+    "message": {
+      "to": ["tu-correo@example.com"],
+      "subject": "Envio real MCP",
+      "body_text": "Mensaje enviado desde la prueba manual MCP"
+    }
+  }'
+```
+
+Enviar un mensaje existente a la papelera opcionalmente:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool gmail_delete_message \
+  --args '{
+    "message_id": "<message_id>"
+  }'
+```
+
+La tool `gmail_delete_message` en esta v1 mueve el mensaje a `TRASH`; no hace borrado permanente.
 
 ## Paso 9: validar tools sensibles con aprobacion explicita
 
@@ -205,6 +490,34 @@ Tools sensibles iniciales:
 - verifica que no aparezcan secretos en logs
 - si usas Postgres o SQLite local, revisa la tabla `audit_logs`
 
+Forzar rate limiting:
+
+```bash
+for i in $(seq 1 130); do
+  curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer local-dev-token" http://localhost:8000/oauth/google/status
+done
+```
+
+Revisar auditoria en SQLite:
+
+```bash
+sqlite3 data/dev.db "select id, tool_name, result_status, error_code, created_at from audit_logs order by id desc limit 20;"
+```
+
+Revisar estados OAuth en SQLite:
+
+```bash
+sqlite3 data/dev.db "select id, state, expires_at, created_at from oauth_states order by id desc limit 10;"
+```
+
+Revisar conexiones Google guardadas en SQLite:
+
+```bash
+sqlite3 data/dev.db "select id, google_email, status, expires_at, created_at from google_connections order by id desc limit 10;"
+```
+
+Si usas Postgres, cambia `sqlite3` por una consulta equivalente con `psql`.
+
 ## Criterios de exito
 
 - el servidor levanta y responde `/health`
@@ -227,6 +540,18 @@ Llamar una tool puntual:
 
 ```bash
 .venv/bin/python scripts/mcp_smoke_test.py --tool auth_google_status
+```
+
+Desconectar la cuenta Google actual:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py --tool auth_google_disconnect
+```
+
+O por HTTP:
+
+```bash
+curl -X POST -H "Authorization: Bearer local-dev-token" http://localhost:8000/oauth/google/disconnect
 ```
 
 ## Notas practicas

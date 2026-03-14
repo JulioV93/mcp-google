@@ -175,6 +175,8 @@ Done:
 - `gmail_send_email`
 - `gmail_delete_message`
 
+Nota: `gmail_delete_message` en v1 se resuelve como move-to-trash.
+
 Done:
 
 - drafts funcionan

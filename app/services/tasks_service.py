@@ -4,7 +4,8 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from app.google.tasks_client import TasksClient, TasksClientError
+from app.errors import AppError
+from app.google.tasks_client import TasksClient
 from app.schemas.tasks import (
     TasksCompleteTaskInput,
     TasksCreateTaskInput,
@@ -16,12 +17,6 @@ from app.schemas.tasks import (
     TasksUpdateTaskInput,
     TasksUpdateTasklistInput,
 )
-
-
-class TasksServiceError(Exception):
-    """Raised when Google Tasks operations fail."""
-
-
 class TasksService:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -41,8 +36,8 @@ class TasksService:
                 max_results=input_data.max_results,
                 page_token=input_data.page_token,
             )
-        except TasksClientError as exc:
-            raise TasksServiceError(str(exc)) from exc
+        except AppError:
+            raise
 
         items = [_normalize_tasklist(item) for item in payload.get("items", [])]
         return {"items": items, "next_page_token": payload.get("nextPageToken")}
@@ -60,8 +55,8 @@ class TasksService:
                 tenant_id=tenant_id,
                 title=input_data.title,
             )
-        except TasksClientError as exc:
-            raise TasksServiceError(str(exc)) from exc
+        except AppError:
+            raise
         return _normalize_tasklist(payload)
 
     def update_tasklist(
@@ -78,8 +73,8 @@ class TasksService:
                 tasklist_id=input_data.tasklist_id,
                 title=input_data.title,
             )
-        except TasksClientError as exc:
-            raise TasksServiceError(str(exc)) from exc
+        except AppError:
+            raise
         return _normalize_tasklist(payload)
 
     def delete_tasklist(
@@ -95,8 +90,8 @@ class TasksService:
                 tenant_id=tenant_id,
                 tasklist_id=input_data.tasklist_id,
             )
-        except TasksClientError as exc:
-            raise TasksServiceError(str(exc)) from exc
+        except AppError:
+            raise
         return {"deleted": True, "tasklist_id": input_data.tasklist_id}
 
     def list_tasks(
@@ -116,8 +111,8 @@ class TasksService:
                 show_completed=input_data.show_completed,
                 show_hidden=input_data.show_hidden,
             )
-        except TasksClientError as exc:
-            raise TasksServiceError(str(exc)) from exc
+        except AppError:
+            raise
 
         items = [_normalize_task(item, input_data.tasklist_id) for item in payload.get("items", [])]
         return {"items": items, "next_page_token": payload.get("nextPageToken")}
@@ -136,8 +131,8 @@ class TasksService:
                 tasklist_id=input_data.tasklist_id,
                 task_body=input_data.task.model_dump(exclude_none=True),
             )
-        except TasksClientError as exc:
-            raise TasksServiceError(str(exc)) from exc
+        except AppError:
+            raise
         return _normalize_task(payload, input_data.tasklist_id)
 
     def update_task(
@@ -155,8 +150,8 @@ class TasksService:
                 task_id=input_data.task_id,
                 task_body=input_data.task.model_dump(exclude_none=True),
             )
-        except TasksClientError as exc:
-            raise TasksServiceError(str(exc)) from exc
+        except AppError:
+            raise
         return _normalize_task(payload, input_data.tasklist_id)
 
     def complete_task(
@@ -175,8 +170,8 @@ class TasksService:
                 task_id=input_data.task_id,
                 task_body={"status": "completed", "completed": completed},
             )
-        except TasksClientError as exc:
-            raise TasksServiceError(str(exc)) from exc
+        except AppError:
+            raise
         return _normalize_task(payload, input_data.tasklist_id)
 
     def delete_task(
@@ -193,8 +188,8 @@ class TasksService:
                 tasklist_id=input_data.tasklist_id,
                 task_id=input_data.task_id,
             )
-        except TasksClientError as exc:
-            raise TasksServiceError(str(exc)) from exc
+        except AppError:
+            raise
         return {
             "deleted": True,
             "tasklist_id": input_data.tasklist_id,

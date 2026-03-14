@@ -1,0 +1,239 @@
+version: 1
+name: google-mcp-agent-error-rules
+description: >-
+  Reglas automaticas para decidir como debe reaccionar un agente ante errores
+  estructurados devueltos por este servidor MCP.
+
+read_order:
+  - error
+  - retryable
+  - category
+  - metadata
+  - detail
+
+global_rules:
+  - id: prefer-error-code-over-detail
+    instruction: >-
+      Decide primero por `error`. Usa `detail` solo como apoyo humano, nunca
+      como criterio principal si `error` ya existe.
+  - id: retry-only-when-allowed
+    instruction: >-
+      Solo reintentes automaticamente si `retryable=true` y la accion es segura
+      o idempotente.
+  - id: always-report-core-fields
+    instruction: >-
+      Cuando informes un fallo, incluye la operacion, `error`, `retryable` y la
+      accion recomendada para resolverlo.
+
+categories:
+  validation:
+    meaning: El payload enviado no cumple el schema o el contrato esperado.
+    default_action: Corregir argumentos antes de repetir.
+    do_not:
+      - Reintentar exactamente el mismo payload.
+  auth:
+    meaning: El cliente MCP no esta autenticado correctamente.
+    default_action: Corregir o renovar el bearer token.
+    do_not:
+      - Reintentar sin cambiar autenticacion.
+  approval:
+    meaning: La accion requiere aprobacion humana.
+    default_action: Solicitar aprobacion y reintentar solo con JWT actualizado.
+    do_not:
+      - Ejecutar una alternativa destructiva sin aprobacion.
+  security:
+    meaning: La peticion fue bloqueada por politicas de origen o host.
+    default_action: Corregir configuracion cliente-servidor.
+    do_not:
+      - Reintentar desde el mismo origen sin cambios.
+  rate_limit:
+    meaning: El MCP local limito la frecuencia de llamadas.
+    default_action: Esperar y reintentar con backoff.
+    do_not:
+      - Enviar rafagas de reintentos.
+  provider:
+    meaning: El error viene de Google o de la integracion con Google.
+    default_action: Clasificar por codigo especifico y actuar segun el caso.
+  internal:
+    meaning: Hay un bug o una configuracion rota dentro del MCP.
+    default_action: Escalar como error interno del servidor.
+    do_not:
+      - Culpar al usuario.
+      - Reintentar ciegamente.
+
+errors:
+  validation_error:
+    category: validation
+    retryable: false
+    meaning: Payload invalido, incompleto o fuera del schema.
+    action:
+      - Revisar argumentos.
+      - Corregir payload.
+      - Reintentar una sola vez con payload corregido.
+    do_not:
+      - Reintentar igual sin cambios.
+
+  unauthorized_client:
+    category: auth
+    retryable: false
+    meaning: JWT faltante, invalido, expirado o mal formado.
+    action:
+      - Verificar header Authorization.
+      - Renovar o solicitar token valido.
+      - Reintentar solo despues de corregir auth.
+    do_not:
+      - Reintentar con el mismo token roto.
+
+  approval_required:
+    category: approval
+    retryable: false
+    meaning: La tool requiere aprobacion humana.
+    action:
+      - Solicitar aprobacion.
+      - Reemitir JWT con approved_tools.
+      - Reintentar solo despues de eso.
+    do_not:
+      - Intentar atajos o reemplazos destructivos.
+
+  origin_not_allowed:
+    category: security
+    retryable: false
+    meaning: El origin del request MCP no esta permitido.
+    action:
+      - Revisar ALLOWED_ORIGINS.
+      - Revisar ALLOWED_HOSTS si aplica.
+      - Corregir configuracion y luego repetir.
+    do_not:
+      - Insistir con el mismo origen sin cambios.
+
+  rate_limited:
+    category: rate_limit
+    retryable: true
+    meaning: El sujeto actual supero el limite local por minuto.
+    action:
+      - Esperar antes de reintentar.
+      - Usar backoff.
+      - Usar metadata.retry_after_seconds si existe.
+    do_not:
+      - Hacer reintentos inmediatos repetidos.
+
+  google_consent_required:
+    category: provider
+    retryable: false
+    meaning: La cuenta Google no esta conectada o el consentimiento no es valido.
+    action:
+      - Iniciar o repetir OAuth Google.
+      - Verificar auth_google_status.
+      - Reintentar solo si connected=true.
+    do_not:
+      - Reintentar la tool sin reconectar.
+
+  insufficient_scope:
+    category: provider
+    retryable: false
+    meaning: La cuenta Google esta conectada pero sin permisos suficientes.
+    action:
+      - Pedir reconexion OAuth con scopes correctos.
+      - Reintentar solo despues de reconectar.
+    do_not:
+      - Reintentar con la misma conexion.
+
+  resource_not_found:
+    category: provider
+    retryable: false
+    meaning: El recurso ya no existe o el ID es incorrecto.
+    action:
+      - Verificar IDs.
+      - Refrescar listados si venia de una referencia previa.
+      - Corregir la referencia antes de repetir.
+    do_not:
+      - Reintentar en bucle con el mismo ID.
+
+  provider_temporary_error:
+    category: provider
+    retryable: true
+    meaning: Fallo temporal del proveedor, timeout, 429 externo o 5xx.
+    action:
+      - Reintentar con backoff exponencial.
+      - Limitar cantidad de reintentos.
+      - Informar indisponibilidad temporal si persiste.
+    do_not:
+      - Reintentar indefinidamente.
+
+  provider_error:
+    category: provider
+    retryable: false
+    meaning: Error del proveedor no clasificado con precision.
+    action:
+      - Revisar metadata.provider_status_code si existe.
+      - Leer detail.
+      - Clasificar si parece auth, permisos, not found o temporal.
+      - Si no se puede clasificar, reportar error de integracion.
+    do_not:
+      - Asumir automaticamente una sola causa.
+
+  configuration_error:
+    category: internal
+    retryable: false
+    meaning: El MCP esta mal configurado.
+    action:
+      - Detener el flujo.
+      - Informar problema de configuracion del servidor.
+    do_not:
+      - Reintentar automaticamente.
+
+  internal_error:
+    category: internal
+    retryable: false
+    meaning: Bug o fallo interno del MCP.
+    action:
+      - Detener la operacion.
+      - Reportar bug del MCP.
+      - Incluir detail y metadata en el reporte.
+    do_not:
+      - Culpar al usuario.
+      - Reintentar ciegamente.
+
+tool_specific_checks:
+  calendar:
+    - calendar_id
+    - event_id
+    - start/end en RFC3339
+    - recurrence
+    - reminders
+  tasks:
+    - tasklist_id
+    - task_id
+    - payload permitido por schema
+  gmail:
+    - message_id
+    - draft_id
+    - email valido
+    - scopes concedidos
+  auth_google:
+    - GOOGLE_CLIENT_ID
+    - GOOGLE_CLIENT_SECRET
+    - GOOGLE_REDIRECT_URI
+    - auth_google_status
+
+retry_policy:
+  allowed_when:
+    - retryable is true
+    - action is safe or idempotent
+  never_auto_retry:
+    - approval_required
+    - google_consent_required
+    - insufficient_scope
+    - configuration_error
+    - internal_error
+
+report_template:
+  required_fields:
+    - operation
+    - error
+    - retryable
+    - recommended_action
+  optional_fields:
+    - category
+    - metadata
+    - detail

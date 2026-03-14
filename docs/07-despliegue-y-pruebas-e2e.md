@@ -47,6 +47,7 @@ La configuracion de `docker-compose.yml` fuerza `DATABASE_URL` a un Postgres loc
 - `APP_BASE_URL=https://tu-dominio`
 - `DATABASE_URL=postgresql+psycopg://user:password@host:5432/dbname`
 - `ALLOWED_ORIGINS=https://tu-dominio`
+- `ALLOWED_HOSTS=tu-dominio`
 - `TOKEN_ENCRYPTION_KEY=<fernet-key>`
 - `GOOGLE_CLIENT_ID=<oauth-client-id>`
 - `GOOGLE_CLIENT_SECRET=<oauth-client-secret>`
@@ -90,8 +91,8 @@ Para remoto:
 Scopes recomendados para esta v1:
 
 - `openid`
-- `email`
-- `profile`
+- `https://www.googleapis.com/auth/userinfo.email`
+- `https://www.googleapis.com/auth/userinfo.profile`
 - `https://www.googleapis.com/auth/calendar`
 - `https://www.googleapis.com/auth/tasks`
 - `https://www.googleapis.com/auth/gmail.readonly`
@@ -231,6 +232,8 @@ Tools sensibles iniciales:
 - `calendar_delete_event`
 - `tasks_delete_task`
 - `tasks_delete_tasklist`
+
+En v1, `gmail_delete_message` envia el mensaje a `TRASH` en lugar de hacer borrado permanente.
 
 ## Despliegue remoto sugerido
 

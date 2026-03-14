@@ -9,10 +9,6 @@ from app.google.credentials import GoogleCredentialsProvider
 from app.google.errors import map_google_http_error
 
 
-class TasksClientError(Exception):
-    """Raised when Google Tasks operations fail."""
-
-
 class TasksClient:
     def __init__(self, session: Session, settings: Settings | None = None) -> None:
         self.session = session
@@ -41,7 +37,7 @@ class TasksClient:
         try:
             return service.tasklists().list(**kwargs).execute()
         except HttpError as exc:
-            raise TasksClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def create_tasklist(
         self,
@@ -54,7 +50,7 @@ class TasksClient:
         try:
             return service.tasklists().insert(body={"title": title}).execute()
         except HttpError as exc:
-            raise TasksClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def update_tasklist(
         self,
@@ -68,7 +64,7 @@ class TasksClient:
         try:
             return service.tasklists().patch(tasklist=tasklist_id, body={"title": title}).execute()
         except HttpError as exc:
-            raise TasksClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def delete_tasklist(
         self,
@@ -81,7 +77,7 @@ class TasksClient:
         try:
             service.tasklists().delete(tasklist=tasklist_id).execute()
         except HttpError as exc:
-            raise TasksClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def list_tasks(
         self,
@@ -106,7 +102,7 @@ class TasksClient:
         try:
             return service.tasks().list(**kwargs).execute()
         except HttpError as exc:
-            raise TasksClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def create_task(
         self,
@@ -120,7 +116,7 @@ class TasksClient:
         try:
             return service.tasks().insert(tasklist=tasklist_id, body=task_body).execute()
         except HttpError as exc:
-            raise TasksClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def update_task(
         self,
@@ -135,7 +131,7 @@ class TasksClient:
         try:
             return service.tasks().patch(tasklist=tasklist_id, task=task_id, body=task_body).execute()
         except HttpError as exc:
-            raise TasksClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def delete_task(
         self,
@@ -149,4 +145,4 @@ class TasksClient:
         try:
             service.tasks().delete(tasklist=tasklist_id, task=task_id).execute()
         except HttpError as exc:
-            raise TasksClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc

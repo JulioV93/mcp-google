@@ -6,23 +6,23 @@ Este checklist te ayuda a confirmar que ya tienes todo lo necesario antes de ini
 
 ## Checklist de entorno local
 
-- [ ] Tengo `Python 3.11+` instalado o usare `Docker` / `Docker Compose`.
-- [ ] Tengo acceso a una terminal dentro del proyecto.
-- [ ] Tengo un puerto libre para la app, normalmente `8000`.
-- [ ] Puedo abrir el navegador localmente para completar el consentimiento Google OAuth.
+- [x ] Tengo `Python 3.11+` instalado o usare `Docker` / `Docker Compose`.
+- [x ] Tengo acceso a una terminal dentro del proyecto.
+- [x ] Tengo un puerto libre para la app, normalmente `8000`.
+- [x ] Puedo abrir el navegador localmente para completar el consentimiento Google OAuth.
 
 ## Checklist de proyecto local
 
-- [ ] El repositorio ya esta descargado en mi maquina.
-- [ ] Ya cree el entorno virtual `.venv` o usare contenedores.
-- [ ] Ya instale dependencias con `pip install -e ".[dev]"` o usare Docker.
-- [ ] Ya tengo un archivo `.env` basado en `.env.example`.
+- [x ] El repositorio ya esta descargado en mi maquina.
+- [x ] Ya cree el entorno virtual `.venv` o usare contenedores.
+- [x ] Ya instale dependencias con `pip install -e ".[dev]"` o usare Docker.
+- [x ] Ya tengo un archivo `.env` basado en `.env.example`.
 
 ## Checklist de base de datos
 
 ### Opcion rapida
 
-- [ ] Voy a usar `SQLite` con `DATABASE_URL=sqlite:///./data/dev.db`.
+- [x ] Voy a usar `SQLite` con `DATABASE_URL=sqlite:///./data/dev.db`.
 
 ### Opcion recomendada para pruebas mas reales
 
@@ -31,36 +31,36 @@ Este checklist te ayuda a confirmar que ya tienes todo lo necesario antes de ini
 
 ## Checklist de Google Cloud Console
 
-- [ ] Cree o reutilice un proyecto en Google Cloud.
-- [ ] Habilite `Google Calendar API`.
-- [ ] Habilite `Google Tasks API`.
-- [ ] Habilite `Gmail API`.
-- [ ] Configure la pantalla de consentimiento OAuth.
-- [ ] Cree un `OAuth Client ID` de tipo `Web application`.
+- [X ] Cree o reutilice un proyecto en Google Cloud.
+- [x ] Habilite `Google Calendar API`.
+- [x ] Habilite `Google Tasks API`.
+- [x ] Habilite `Gmail API`.
+- [x ] Configure la pantalla de consentimiento OAuth.
+- [x ] Cree un `OAuth Client ID` de tipo `Web application`.
 
 ## Checklist de pantalla de consentimiento
 
-- [ ] Defini el nombre de la aplicacion.
-- [ ] Defini el correo de soporte.
-- [ ] Agregue usuarios de prueba si la app esta en modo testing.
-- [ ] Agregue los scopes requeridos.
+- [x ] Defini el nombre de la aplicacion.
+- [x ] Defini el correo de soporte.
+- [x ] Agregue usuarios de prueba si la app esta en modo testing.
+- [x ] Agregue los scopes requeridos.
 
 ## Checklist de scopes Google
 
-- [ ] `openid`
-- [ ] `email`
-- [ ] `profile`
-- [ ] `https://www.googleapis.com/auth/calendar`
-- [ ] `https://www.googleapis.com/auth/tasks`
-- [ ] `https://www.googleapis.com/auth/gmail.readonly`
-- [ ] `https://www.googleapis.com/auth/gmail.compose`
-- [ ] `https://www.googleapis.com/auth/gmail.modify`
+- [x ] `openid`
+- [x ] `email`
+- [x ] `profile`
+- [x ] `https://www.googleapis.com/auth/calendar`
+- [x ] `https://www.googleapis.com/auth/tasks`
+- [x ] `https://www.googleapis.com/auth/gmail.readonly`
+- [x ] `https://www.googleapis.com/auth/gmail.compose`
+- [x ] `https://www.googleapis.com/auth/gmail.modify`
 
 ## Checklist de redirect URIs
 
 ### Para local
 
-- [ ] `http://localhost:8000/oauth/google/callback`
+- [x ] `http://localhost:8000/oauth/google/callback`
 
 ### Para remoto, si aplica
 
@@ -93,18 +93,18 @@ Este checklist te ayuda a confirmar que ya tienes todo lo necesario antes de ini
 
 ## Checklist de cuentas de prueba
 
-- [ ] Tengo una cuenta Google real para vincular.
-- [ ] Esa cuenta tiene acceso a Calendar.
-- [ ] Esa cuenta tiene acceso a Tasks.
-- [ ] Esa cuenta tiene acceso a Gmail.
-- [ ] Idealmente no es una cuenta personal critica.
+- [x ] Tengo una cuenta Google real para vincular.
+- [x ] Esa cuenta tiene acceso a Calendar.
+- [x ] Esa cuenta tiene acceso a Tasks.
+- [x ] Esa cuenta tiene acceso a Gmail.
+- [x ] Idealmente no es una cuenta personal critica.
 
 ## Checklist de identidad del cliente MCP
 
 ### Para prueba simple
 
-- [ ] Voy a usar `JWT_TEST_MODE=true`.
-- [ ] Voy a autenticar con `Authorization: Bearer local-dev-token`.
+- [x ] Voy a usar `JWT_TEST_MODE=true`.
+- [x ] Voy a autenticar con `Authorization: Bearer local-dev-token`.
 
 ### Para prueba mas realista
 

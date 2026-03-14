@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Construir un servidor MCP remoto en `Python` usando `FastMCP` para exponer operaciones sobre Google Calendar, Google Tasks y Gmail. El servidor debe ser multiusuario, operar con una cuenta Google por usuario y estar preparado para que agentes externos consuman sus tools mediante autenticacion propia del cliente.
+Construir un servidor MCP remoto en `Python` usando `FastMCP` para exponer operaciones sobre Google Calendar, Google Tasks, Gmail y Google Drive. El servidor debe ser multiusuario, operar con una cuenta Google por usuario y estar preparado para que agentes externos consuman sus tools mediante autenticacion propia del cliente.
 
 ## Alcance funcional de v1
 

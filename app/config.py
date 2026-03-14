@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from typing import Literal, Optional, cast
+from urllib.parse import urlparse
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -29,6 +30,7 @@ class Settings(BaseSettings):
         default="http://localhost:8000,http://127.0.0.1:8000",
         validation_alias="ALLOWED_ORIGINS",
     )
+    allowed_hosts: str = Field(default="", validation_alias="ALLOWED_HOSTS")
     rate_limit_enabled: bool = Field(default=True, validation_alias="RATE_LIMIT_ENABLED")
     rate_limit_rpm: int = Field(default=120, validation_alias="RATE_LIMIT_RPM")
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
@@ -40,7 +42,12 @@ class Settings(BaseSettings):
             "gmail_delete_message,"
             "calendar_delete_event,"
             "tasks_delete_task,"
-            "tasks_delete_tasklist"
+            "tasks_delete_tasklist,"
+            "drive_confirm_upload,"
+            "drive_confirm_save_file,"
+            "drive_confirm_delete_file,"
+            "drive_confirm_share_file,"
+            "drive_confirm_revoke_permission"
         ),
         validation_alias="APPROVAL_REQUIRED_TOOLS",
     )
@@ -71,9 +78,19 @@ class Settings(BaseSettings):
             "https://www.googleapis.com/auth/gmail.readonly,"
             "https://www.googleapis.com/auth/gmail.compose,"
             "https://www.googleapis.com/auth/gmail.modify,"
-            "openid,email,profile"
+            "https://www.googleapis.com/auth/drive,"
+            "openid,https://www.googleapis.com/auth/userinfo.email,"
+            "https://www.googleapis.com/auth/userinfo.profile"
         ),
         validation_alias="GOOGLE_OAUTH_SCOPES",
+    )
+    drive_inline_content_limit_bytes: int = Field(
+        default=262144,
+        validation_alias="DRIVE_INLINE_CONTENT_LIMIT_BYTES",
+    )
+    drive_confirmation_ttl_seconds: int = Field(
+        default=600,
+        validation_alias="DRIVE_CONFIRMATION_TTL_SECONDS",
     )
     jwt_issuer: str = Field(
         default="http://localhost:8000/auth/dev",
@@ -116,6 +133,18 @@ class Settings(BaseSettings):
     @property
     def approval_required_tool_list(self) -> list[str]:
         return [item.strip() for item in self.approval_required_tools.split(",") if item.strip()]
+
+    @property
+    def allowed_host_list(self) -> list[str]:
+        explicit = [item.strip() for item in self.allowed_hosts.split(",") if item.strip()]
+        if explicit:
+            return explicit
+        if self.environment == "development":
+            return ["localhost", "127.0.0.1", "testserver"]
+        parsed = urlparse(self.app_base_url)
+        if parsed.hostname:
+            return [parsed.hostname]
+        return []
 
 
 @lru_cache(maxsize=1)

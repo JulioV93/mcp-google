@@ -42,6 +42,10 @@ class User(TimestampMixin, Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    pending_google_operations: Mapped[list[PendingGoogleOperation]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class GoogleConnection(TimestampMixin, Base):
@@ -99,3 +103,23 @@ class AuditLog(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="audit_logs")
+
+
+class PendingGoogleOperation(TimestampMixin, Base):
+    __tablename__ = "pending_google_operations"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    operation_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    operation_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    resource_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    resource_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    payload_normalized: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    payload_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending", index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped[User] = relationship(back_populates="pending_google_operations")

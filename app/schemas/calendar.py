@@ -17,6 +17,20 @@ class CalendarEventDateTime(BaseModel):
         return self
 
 
+class CalendarEventReminderOverride(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    method: str = Field(pattern="^(email|popup)$")
+    minutes: int = Field(ge=0)
+
+
+class CalendarEventReminders(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    use_default: bool | None = Field(default=None, alias="useDefault")
+    overrides: list[CalendarEventReminderOverride] | None = None
+
+
 class CalendarEventInput(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -25,6 +39,8 @@ class CalendarEventInput(BaseModel):
     location: str | None = None
     start: CalendarEventDateTime
     end: CalendarEventDateTime
+    recurrence: list[str] | None = None
+    reminders: CalendarEventReminders | None = None
 
 
 class CalendarListEventsInput(BaseModel):
