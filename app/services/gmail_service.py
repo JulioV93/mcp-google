@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.google.gmail_client import GmailClient, GmailClientError, build_raw_message
+from app.errors import AppError
+from app.google.gmail_client import GmailClient, build_raw_message
 from app.schemas.gmail import (
     GmailCreateDraftInput,
     GmailDeleteDraftInput,
@@ -13,12 +14,6 @@ from app.schemas.gmail import (
     GmailSendEmailInput,
     GmailUpdateDraftInput,
 )
-
-
-class GmailServiceError(Exception):
-    """Raised when Gmail operations fail."""
-
-
 class GmailService:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -39,8 +34,8 @@ class GmailService:
                 max_results=input_data.max_results,
                 page_token=input_data.page_token,
             )
-        except GmailClientError as exc:
-            raise GmailServiceError(str(exc)) from exc
+        except AppError:
+            raise
 
         items = [
             {
@@ -64,8 +59,8 @@ class GmailService:
                 tenant_id=tenant_id,
                 message_id=input_data.message_id,
             )
-        except GmailClientError as exc:
-            raise GmailServiceError(str(exc)) from exc
+        except AppError:
+            raise
         return _normalize_message(payload)
 
     def list_threads(
@@ -83,8 +78,8 @@ class GmailService:
                 max_results=input_data.max_results,
                 page_token=input_data.page_token,
             )
-        except GmailClientError as exc:
-            raise GmailServiceError(str(exc)) from exc
+        except AppError:
+            raise
 
         items = [
             {
@@ -110,8 +105,8 @@ class GmailService:
                 tenant_id=tenant_id,
                 message_body=raw_message,
             )
-        except GmailClientError as exc:
-            raise GmailServiceError(str(exc)) from exc
+        except AppError:
+            raise
         return _normalize_draft(payload)
 
     def update_draft(
@@ -129,8 +124,8 @@ class GmailService:
                 draft_id=input_data.draft_id,
                 message_body=raw_message,
             )
-        except GmailClientError as exc:
-            raise GmailServiceError(str(exc)) from exc
+        except AppError:
+            raise
         return _normalize_draft(payload)
 
     def delete_draft(
@@ -146,8 +141,8 @@ class GmailService:
                 tenant_id=tenant_id,
                 draft_id=input_data.draft_id,
             )
-        except GmailClientError as exc:
-            raise GmailServiceError(str(exc)) from exc
+        except AppError:
+            raise
         return {"deleted": True, "draft_id": input_data.draft_id}
 
     def send_email(
@@ -164,8 +159,8 @@ class GmailService:
                 tenant_id=tenant_id,
                 message_body=raw_message,
             )
-        except GmailClientError as exc:
-            raise GmailServiceError(str(exc)) from exc
+        except AppError:
+            raise
         return {
             "id": payload.get("id"),
             "thread_id": payload.get("threadId"),
@@ -180,14 +175,19 @@ class GmailService:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         try:
-            self.client.delete_message(
+            payload = self.client.trash_message(
                 external_subject=external_subject,
                 tenant_id=tenant_id,
                 message_id=input_data.message_id,
             )
-        except GmailClientError as exc:
-            raise GmailServiceError(str(exc)) from exc
-        return {"deleted": True, "message_id": input_data.message_id}
+        except AppError:
+            raise
+        return {
+            "trashed": True,
+            "message_id": payload.get("id", input_data.message_id),
+            "thread_id": payload.get("threadId"),
+            "label_ids": payload.get("labelIds", []),
+        }
 
 
 def _normalize_message(payload: dict[str, object]) -> dict[str, object]:

@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import contextmanager
+import logging
 from typing import Any
 
-from app.db.session import SessionLocal
 from app.config import get_settings
-from app.errors import ApprovalRequiredError, AppError, ProviderError
+from app.db.session import SessionLocal
+from app.errors import ApprovalRequiredError, AppError, InternalError
 from app.services.audit_service import AuditService
+
+
+logger = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -53,6 +57,7 @@ def audited_call(
             )
             raise
         except Exception as exc:
+            logger.exception("Unexpected error during tool execution", extra={"tool_name": tool_name})
             audit_service.record_tool_call(
                 external_subject=external_subject,
                 tenant_id=tenant_id,
@@ -61,9 +66,9 @@ def audited_call(
                 resource_type=resource_type,
                 arguments=arguments,
                 result_status="error",
-                error_code=exc.__class__.__name__,
+                error_code="internal_error",
             )
-            raise ProviderError(str(exc)) from exc
+            raise InternalError(metadata={"tool_name": tool_name}) from exc
 
 
 def ensure_tool_approval(*, tool_name: str, approved_tools: tuple[str, ...]) -> None:

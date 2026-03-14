@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.google.calendar_client import CalendarClient, CalendarClientError
+from app.errors import AppError
+from app.google.calendar_client import CalendarClient
 from app.schemas.calendar import (
     CalendarCreateEventInput,
     CalendarDeleteEventInput,
@@ -10,10 +11,6 @@ from app.schemas.calendar import (
     CalendarListEventsInput,
     CalendarUpdateEventInput,
 )
-
-
-class CalendarServiceError(Exception):
-    """Raised when calendar operations fail."""
 
 
 class CalendarService:
@@ -24,8 +21,8 @@ class CalendarService:
     def list_calendars(self, *, external_subject: str, tenant_id: str | None = None) -> dict[str, object]:
         try:
             payload = self.client.list_calendars(external_subject=external_subject, tenant_id=tenant_id)
-        except CalendarClientError as exc:
-            raise CalendarServiceError(str(exc)) from exc
+        except AppError:
+            raise
 
         calendars = [
             {
@@ -56,8 +53,8 @@ class CalendarService:
                 page_token=input_data.page_token,
                 query=input_data.query,
             )
-        except CalendarClientError as exc:
-            raise CalendarServiceError(str(exc)) from exc
+        except AppError:
+            raise
 
         events = [_normalize_event(item, input_data.calendar_id) for item in payload.get("items", [])]
         return {
@@ -79,8 +76,8 @@ class CalendarService:
                 calendar_id=input_data.calendar_id,
                 event_id=input_data.event_id,
             )
-        except CalendarClientError as exc:
-            raise CalendarServiceError(str(exc)) from exc
+        except AppError:
+            raise
         return _normalize_event(payload, input_data.calendar_id)
 
     def create_event(
@@ -97,8 +94,8 @@ class CalendarService:
                 calendar_id=input_data.calendar_id,
                 event_body=input_data.event.model_dump(by_alias=True, exclude_none=True),
             )
-        except CalendarClientError as exc:
-            raise CalendarServiceError(str(exc)) from exc
+        except AppError:
+            raise
         return _normalize_event(payload, input_data.calendar_id)
 
     def update_event(
@@ -116,8 +113,8 @@ class CalendarService:
                 event_id=input_data.event_id,
                 event_body=input_data.event.model_dump(by_alias=True, exclude_none=True),
             )
-        except CalendarClientError as exc:
-            raise CalendarServiceError(str(exc)) from exc
+        except AppError:
+            raise
         return _normalize_event(payload, input_data.calendar_id)
 
     def delete_event(
@@ -134,8 +131,8 @@ class CalendarService:
                 calendar_id=input_data.calendar_id,
                 event_id=input_data.event_id,
             )
-        except CalendarClientError as exc:
-            raise CalendarServiceError(str(exc)) from exc
+        except AppError:
+            raise
         return {
             "deleted": True,
             "calendar_id": input_data.calendar_id,
@@ -153,6 +150,8 @@ def _normalize_event(payload: dict[str, object], calendar_id: str) -> dict[str, 
         "status": payload.get("status"),
         "start": payload.get("start"),
         "end": payload.get("end"),
+        "recurrence": payload.get("recurrence", []),
+        "reminders": payload.get("reminders"),
         "html_link": payload.get("htmlLink"),
         "updated": payload.get("updated"),
     }

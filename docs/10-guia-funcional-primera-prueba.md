@@ -30,8 +30,8 @@ docker compose up --build
 
 ### Checklist del paso 1
 
-- [ ] El entorno virtual existe o Docker Compose levanta correctamente.
-- [ ] Las dependencias quedaron instaladas.
+- [x ] El entorno virtual existe o Docker Compose levanta correctamente.
+- [x ] Las dependencias quedaron instaladas.
 
 ## Paso 2: revisar `.env`
 
@@ -56,9 +56,9 @@ REQUIRE_EXPLICIT_APPROVAL=false
 
 ### Checklist del paso 2
 
-- [ ] `GOOGLE_CLIENT_ID` esta completo.
-- [ ] `GOOGLE_CLIENT_SECRET` esta completo.
-- [ ] `GOOGLE_REDIRECT_URI` coincide exactamente con Google Cloud Console.
+- [x ] `GOOGLE_CLIENT_ID` esta completo.
+- [x ] `GOOGLE_CLIENT_SECRET` esta completo.
+- [x ] `GOOGLE_REDIRECT_URI` coincide exactamente con Google Cloud Console.
 - [ ] `TOKEN_ENCRYPTION_KEY` esta definido.
 
 ## Paso 3: aplicar migraciones

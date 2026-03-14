@@ -68,13 +68,14 @@ Nunca se debe aceptar `user_id`, `external_subject` o `google_email` desde los a
 ## Scopes recomendados
 
 - `openid`
-- `email`
-- `profile`
+- `https://www.googleapis.com/auth/userinfo.email`
+- `https://www.googleapis.com/auth/userinfo.profile`
 - `https://www.googleapis.com/auth/calendar`
 - `https://www.googleapis.com/auth/tasks`
 - `https://www.googleapis.com/auth/gmail.readonly`
 - `https://www.googleapis.com/auth/gmail.compose`
 - `https://www.googleapis.com/auth/gmail.modify`
+- `https://www.googleapis.com/auth/drive`
 
 No se recomienda usar `https://mail.google.com/` en v1 salvo necesidad real.
 
@@ -123,6 +124,8 @@ Las siguientes operaciones deben auditarse con especial cuidado:
 - `tasks_delete_tasklist`
 
 Estas operations pueden requerir aprobacion explicita cuando `REQUIRE_EXPLICIT_APPROVAL=true`.
+
+En v1, `gmail_delete_message` se implementa como mover el mensaje a la papelera para evitar permisos mas amplios de borrado permanente.
 
 ### Seguridad HTTP y MCP remoto
 

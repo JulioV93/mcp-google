@@ -15,6 +15,7 @@ APP_BASE_URL=http://localhost:8000
 DATABASE_URL=sqlite:///./data/dev.db
 
 ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
+ALLOWED_HOSTS=localhost,127.0.0.1,testserver
 RATE_LIMIT_ENABLED=true
 RATE_LIMIT_RPM=120
 
@@ -34,7 +35,7 @@ GOOGLE_CLIENT_ID=<GOOGLE_OAUTH_CLIENT_ID>
 GOOGLE_CLIENT_SECRET=<GOOGLE_OAUTH_CLIENT_SECRET>
 GOOGLE_REDIRECT_URI=http://localhost:8000/oauth/google/callback
 GOOGLE_ID_TOKEN_CLOCK_SKEW_SECONDS=10
-GOOGLE_OAUTH_SCOPES=https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/tasks,https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.compose,https://www.googleapis.com/auth/gmail.modify,openid,email,profile
+GOOGLE_OAUTH_SCOPES=https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/tasks,https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.compose,https://www.googleapis.com/auth/gmail.modify,openid,https://www.googleapis.com/auth/userinfo.email,https://www.googleapis.com/auth/userinfo.profile
 
 JWT_ISSUER=http://localhost:8000/auth/dev
 JWT_AUDIENCE=google-mcp-server
@@ -101,6 +102,16 @@ Ejemplo local:
 ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
 ```
 
+### `ALLOWED_HOSTS`
+
+Lista de hosts validos para `TrustedHostMiddleware`.
+
+Ejemplo local:
+
+```env
+ALLOWED_HOSTS=localhost,127.0.0.1,testserver
+```
+
 ### `JWT_TEST_MODE`
 
 Para prueba inicial local puedes dejar:
@@ -139,6 +150,7 @@ En ese caso, tu JWT real debe incluir `approved_tools`.
 - [ ] `GOOGLE_REDIRECT_URI` coincide exactamente con Google Cloud Console
 - [ ] `TOKEN_ENCRYPTION_KEY` es una clave Fernet valida
 - [ ] `ALLOWED_ORIGINS` incluye el origen que usaras
+- [ ] `ALLOWED_HOSTS` incluye el host real que usara el despliegue
 - [ ] `JWT_TEST_MODE` esta segun el tipo de prueba que quieres hacer
 - [ ] `REQUIRE_EXPLICIT_APPROVAL` esta segun el nivel de seguridad que quieres probar
 

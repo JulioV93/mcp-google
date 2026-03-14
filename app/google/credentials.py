@@ -4,6 +4,7 @@ from google.oauth2.credentials import Credentials
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
+from app.errors import InternalError
 from app.services.auth_service import AuthService
 
 
@@ -19,5 +20,5 @@ class GoogleCredentialsProvider:
             tenant_id=tenant_id,
         )
         if not isinstance(credentials, Credentials):
-            raise RuntimeError("Expected Google OAuth credentials")
+            raise InternalError("Expected Google OAuth credentials")
         return credentials

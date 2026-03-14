@@ -6,7 +6,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from app.context.request_context import maybe_get_request_context
-from app.errors import AppError, ProviderError
+from app.errors import AppError, UnauthorizedError
 from app.tool_runtime import audited_call, ensure_tool_approval
 
 
@@ -27,7 +27,7 @@ def register_ping_tool(mcp: FastMCP, *, server_name: str, server_version: str) -
 def require_context():
     context = maybe_get_request_context()
     if context is None:
-        raise RuntimeError("Authenticated request context is required")
+        raise UnauthorizedError("Authenticated request context is required")
     return context
 
 
@@ -52,6 +52,4 @@ def run_tool(
             operation=lambda session: operation(session, context),
         )
     except AppError as exc:
-        raise RuntimeError(exc.detail) from exc
-    except ProviderError as exc:
-        raise RuntimeError(exc.detail) from exc
+        raise exc.to_tool_error() from exc

@@ -139,7 +139,7 @@ def register_gmail_tools(mcp: FastMCP) -> None:
 
     @mcp.tool
     def gmail_delete_message(message_id: str) -> dict[str, object]:
-        """Delete a Gmail message."""
+        """Move a Gmail message to trash."""
         payload = GmailDeleteMessageInput(message_id=message_id)
         return run_tool(
             tool_name="gmail_delete_message",

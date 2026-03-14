@@ -12,10 +12,6 @@ from app.google.credentials import GoogleCredentialsProvider
 from app.google.errors import map_google_http_error
 
 
-class GmailClientError(Exception):
-    """Raised when Gmail operations fail."""
-
-
 def build_raw_message(
     *,
     to: list[str],
@@ -72,7 +68,7 @@ class GmailClient:
         try:
             return service.users().messages().list(**kwargs).execute()
         except HttpError as exc:
-            raise GmailClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def get_message(
         self,
@@ -89,7 +85,7 @@ class GmailClient:
                 kwargs["metadataHeaders"] = ["Subject", "From", "To"]
             return service.users().messages().get(**kwargs).execute()
         except HttpError as exc:
-            raise GmailClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def list_threads(
         self,
@@ -109,7 +105,7 @@ class GmailClient:
         try:
             return service.users().threads().list(**kwargs).execute()
         except HttpError as exc:
-            raise GmailClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def create_draft(
         self,
@@ -122,7 +118,7 @@ class GmailClient:
         try:
             return service.users().drafts().create(userId="me", body={"message": message_body}).execute()
         except HttpError as exc:
-            raise GmailClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def update_draft(
         self,
@@ -140,7 +136,7 @@ class GmailClient:
                 body={"id": draft_id, "message": message_body},
             ).execute()
         except HttpError as exc:
-            raise GmailClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def delete_draft(
         self,
@@ -153,7 +149,7 @@ class GmailClient:
         try:
             service.users().drafts().delete(userId="me", id=draft_id).execute()
         except HttpError as exc:
-            raise GmailClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def send_message(
         self,
@@ -166,17 +162,17 @@ class GmailClient:
         try:
             return service.users().messages().send(userId="me", body=message_body).execute()
         except HttpError as exc:
-            raise GmailClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
-    def delete_message(
+    def trash_message(
         self,
         *,
         external_subject: str,
         message_id: str,
         tenant_id: str | None = None,
-    ) -> None:
+    ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
         try:
-            service.users().messages().delete(userId="me", id=message_id).execute()
+            return service.users().messages().trash(userId="me", id=message_id).execute()
         except HttpError as exc:
-            raise GmailClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc

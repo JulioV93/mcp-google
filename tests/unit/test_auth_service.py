@@ -4,7 +4,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.base import Base
-from app.services.auth_service import AuthService, AuthServiceError
+from app.errors import ConfigurationError
+from app.services.auth_service import AuthService
 from app.security.encryption import decrypt_text, encrypt_text
 
 
@@ -31,10 +32,10 @@ def test_begin_google_auth_requires_google_credentials() -> None:
 
     try:
         service.begin_google_auth(external_subject="user-1")
-    except AuthServiceError as exc:
-        assert "client credentials" in str(exc)
+    except ConfigurationError as exc:
+        assert "client credentials" in exc.detail
     else:
-        raise AssertionError("Expected AuthServiceError when Google OAuth credentials are missing")
+        raise AssertionError("Expected ConfigurationError when Google OAuth credentials are missing")
 
 
 def test_google_status_is_empty_without_connection() -> None:
@@ -47,3 +48,4 @@ def test_google_status_is_empty_without_connection() -> None:
     assert result.google_email is None
     assert result.scopes == []
     assert result.status is None
+    assert result.missing_scopes == service.settings.google_oauth_scope_list

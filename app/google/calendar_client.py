@@ -9,10 +9,6 @@ from app.google.credentials import GoogleCredentialsProvider
 from app.google.errors import map_google_http_error
 
 
-class CalendarClientError(Exception):
-    """Raised when Google Calendar operations fail."""
-
-
 class CalendarClient:
     def __init__(self, session: Session, settings: Settings | None = None) -> None:
         self.session = session
@@ -31,7 +27,7 @@ class CalendarClient:
         try:
             return service.calendarList().list().execute()
         except HttpError as exc:
-            raise CalendarClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def list_events(
         self,
@@ -63,7 +59,7 @@ class CalendarClient:
         try:
             return service.events().list(**kwargs).execute()
         except HttpError as exc:
-            raise CalendarClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def get_event(
         self,
@@ -77,7 +73,7 @@ class CalendarClient:
         try:
             return service.events().get(calendarId=calendar_id, eventId=event_id).execute()
         except HttpError as exc:
-            raise CalendarClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def create_event(
         self,
@@ -91,7 +87,7 @@ class CalendarClient:
         try:
             return service.events().insert(calendarId=calendar_id, body=event_body).execute()
         except HttpError as exc:
-            raise CalendarClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def update_event(
         self,
@@ -110,7 +106,7 @@ class CalendarClient:
                 body=event_body,
             ).execute()
         except HttpError as exc:
-            raise CalendarClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc
 
     def delete_event(
         self,
@@ -124,4 +120,4 @@ class CalendarClient:
         try:
             service.events().delete(calendarId=calendar_id, eventId=event_id, sendUpdates="none").execute()
         except HttpError as exc:
-            raise CalendarClientError(str(map_google_http_error(exc))) from exc
+            raise map_google_http_error(exc) from exc

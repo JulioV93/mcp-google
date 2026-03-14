@@ -9,14 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db.models import GoogleConnection, User
+from app.errors import AuthenticationProviderError, ConfigurationError, ValidationError
 from app.oauth.google_oauth import GoogleOAuthTokens, build_authorization_url, build_user_credentials, exchange_code
 from app.oauth.state_store import OAuthStateStore
 from app.security.encryption import decrypt_text, encrypt_text
 from app.services.connection_service import ConnectionService
-
-
-class AuthServiceError(Exception):
-    """Raised for authentication workflow errors."""
 
 
 @dataclass(slots=True)
@@ -33,6 +30,7 @@ class AuthStatusResult:
     google_email: str | None
     scopes: list[str]
     status: str | None
+    missing_scopes: list[str]
 
 
 class AuthService:
@@ -63,16 +61,23 @@ class AuthService:
             scopes=state_record.requested_scopes,
         )
 
-    def complete_google_auth(self, *, state: str, code: str) -> GoogleConnection:
+    def complete_google_auth(
+        self,
+        *,
+        state: str,
+        code: str,
+        authorization_response: str | None = None,
+    ) -> GoogleConnection:
         self._validate_google_oauth_settings()
         state_record = self.state_store.get_valid(state)
         if state_record is None:
-            raise AuthServiceError("OAuth state is invalid or expired")
+            raise ValidationError("OAuth state is invalid or expired")
 
         tokens = exchange_code(
             state=state_record.state,
             code=code,
             code_verifier=state_record.code_verifier,
+            authorization_response=authorization_response,
             settings=self.settings,
         )
         user = state_record.user
@@ -87,12 +92,21 @@ class AuthService:
         connection = self.connections.get_google_connection(user=user)
         self.session.commit()
         if connection is None:
-            return AuthStatusResult(connected=False, google_email=None, scopes=[], status=None)
+            return AuthStatusResult(
+                connected=False,
+                google_email=None,
+                scopes=[],
+                status=None,
+                missing_scopes=list(self.settings.google_oauth_scope_list),
+            )
+        granted_scopes = list(connection.granted_scopes or [])
+        missing_scopes = [scope for scope in self.settings.google_oauth_scope_list if scope not in granted_scopes]
         return AuthStatusResult(
             connected=connection.status == "active",
             google_email=connection.google_email,
-            scopes=list(connection.granted_scopes or []),
+            scopes=granted_scopes,
             status=connection.status,
+            missing_scopes=missing_scopes,
         )
 
     def disconnect_google(self, *, external_subject: str, tenant_id: str | None = None) -> bool:
@@ -109,7 +123,7 @@ class AuthService:
         user = self.connections.get_or_create_user(external_subject=external_subject, tenant_id=tenant_id)
         connection = self.connections.get_google_connection(user=user)
         if connection is None:
-            raise AuthServiceError("Google connection is missing")
+            raise AuthenticationProviderError("Google connection is missing")
 
         access_token = decrypt_text(connection.access_token_encrypted, self.settings)
         refresh_token = (
@@ -174,7 +188,7 @@ class AuthService:
 
     def _extract_google_identity(self, tokens: GoogleOAuthTokens) -> tuple[str, str]:
         if not tokens.id_token:
-            raise AuthServiceError("Google ID token was not returned")
+            raise AuthenticationProviderError("Google ID token was not returned")
         info = id_token.verify_oauth2_token(
             tokens.id_token,
             GoogleAuthRequest(),
@@ -185,14 +199,14 @@ class AuthService:
         google_subject = str(info.get("sub") or "")
         email_verified = bool(info.get("email_verified", False))
         if not google_email or not google_subject:
-            raise AuthServiceError("Google identity payload is incomplete")
+            raise AuthenticationProviderError("Google identity payload is incomplete")
         if not email_verified:
-            raise AuthServiceError("Google identity email is not verified")
+            raise AuthenticationProviderError("Google identity email is not verified")
         return google_email, google_subject
 
     def _validate_google_oauth_settings(self) -> None:
         if not self.settings.google_client_id or not self.settings.google_client_secret:
-            raise AuthServiceError("Google OAuth client credentials are not configured")
+            raise ConfigurationError("Google OAuth client credentials are not configured")
 
 
 def _parse_expiry(expiry_iso: str | None) -> datetime | None:

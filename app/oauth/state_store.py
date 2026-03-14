@@ -31,7 +31,10 @@ class OAuthStateStore:
         state = self.repository.get_by_state(state_value)
         if state is None:
             return None
-        if state.expires_at <= datetime.now(UTC):
+        expires_at = state.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        if expires_at <= datetime.now(UTC):
             return None
         return state
 

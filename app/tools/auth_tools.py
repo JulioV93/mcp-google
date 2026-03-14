@@ -68,6 +68,7 @@ def _auth_google_status(session, context, settings: Settings) -> dict[str, objec
         "google_email": result.google_email,
         "scopes": result.scopes,
         "status": result.status,
+        "missing_scopes": result.missing_scopes,
     }
 
 

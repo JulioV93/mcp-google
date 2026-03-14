@@ -106,7 +106,7 @@ def test_create_draft_normalizes_response() -> None:
     assert result["message"]["subject"] == "Draft subject"
 
 
-def test_send_and_delete_message_return_expected_shape() -> None:
+def test_send_and_trash_message_return_expected_shape() -> None:
     session = Mock()
     service = GmailService(session)
     service.client = Mock()
@@ -114,6 +114,11 @@ def test_send_and_delete_message_return_expected_shape() -> None:
         "id": "msg-sent",
         "threadId": "thr-sent",
         "labelIds": ["SENT"],
+    }
+    service.client.trash_message.return_value = {
+        "id": "msg-sent",
+        "threadId": "thr-sent",
+        "labelIds": ["TRASH"],
     }
 
     send_payload = GmailSendEmailInput(
@@ -132,4 +137,9 @@ def test_send_and_delete_message_return_expected_shape() -> None:
         external_subject="user-1",
         input_data=GmailDeleteMessageInput(message_id="msg-sent"),
     )
-    assert delete_result == {"deleted": True, "message_id": "msg-sent"}
+    assert delete_result == {
+        "trashed": True,
+        "message_id": "msg-sent",
+        "thread_id": "thr-sent",
+        "label_ids": ["TRASH"],
+    }
