@@ -89,6 +89,7 @@
 
 - crea un evento
 - valida horarios, timezone y estructura minima
+- soporta `colorId` para asignar color al evento al crearlo
 - soporta `recurrence` en formato RRULE de Google Calendar
 - soporta `reminders.useDefault` y `reminders.overrides`
 
@@ -96,6 +97,7 @@
 
 - actualiza un evento existente
 - preferible con semantica de patch en v1
+- permite actualizar `colorId` del evento
 - permite actualizar recurrencia y recordatorios personalizados
 
 ### `calendar_delete_event`

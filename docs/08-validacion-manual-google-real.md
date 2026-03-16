@@ -158,6 +158,22 @@ Crear un evento:
   }'
 ```
 
+Crear un evento con color:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool calendar_create_event \
+  --args '{
+    "calendar_id": "primary",
+    "event": {
+      "summary": "MCP Test Event Color",
+      "colorId": "5",
+      "start": {"dateTime": "2026-03-20T15:00:00Z"},
+      "end": {"dateTime": "2026-03-20T15:30:00Z"}
+    }
+  }'
+```
+
 Crear un evento recurrente diario con recordatorio personalizado 5 minutos antes:
 
 ```bash
@@ -220,6 +236,23 @@ Actualizar el evento:
   }'
 ```
 
+Actualizar el color del evento:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool calendar_update_event \
+  --args '{
+    "calendar_id": "primary",
+    "event_id": "<event_id>",
+    "event": {
+      "summary": "MCP Test Event Updated",
+      "colorId": "11",
+      "start": {"dateTime": "2026-03-20T15:00:00Z"},
+      "end": {"dateTime": "2026-03-20T16:00:00Z"}
+    }
+  }'
+```
+
 Actualizar un evento para dejarlo recurrente con recordatorio personalizado:
 
 ```bash
@@ -243,7 +276,7 @@ Actualizar un evento para dejarlo recurrente con recordatorio personalizado:
   }'
 ```
 
-En la respuesta o al consultar luego con `calendar_get_event`, verifica que aparezcan `recurrence` y `reminders`.
+En la respuesta o al consultar luego con `calendar_get_event`, verifica que aparezcan `color_id`, `recurrence` y `reminders` cuando corresponda.
 
 Borrar el evento:
 

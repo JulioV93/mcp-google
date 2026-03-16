@@ -185,6 +185,8 @@ Debes ver `connected: true`.
   }'
 ```
 
+Si quieres probar colores desde el inicio, puedes agregar `"colorId": "5"` dentro de `event`.
+
 ### Checklist del paso 10
 
 - [ ] Puedo listar calendarios.

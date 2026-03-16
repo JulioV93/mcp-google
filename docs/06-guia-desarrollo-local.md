@@ -355,6 +355,7 @@ Si la vinculacion salio bien, ahora deberias ver `connected: true`.
   "calendar_id": "primary",
   "event": {
     "summary": "Evento desde Inspector",
+    "colorId": "5",
     "start": {"dateTime": "2026-03-20T15:00:00Z"},
     "end": {"dateTime": "2026-03-20T15:30:00Z"}
   }
@@ -377,6 +378,21 @@ Si la vinculacion salio bien, ahora deberias ver `connected: true`.
         {"method": "popup", "minutes": 5}
       ]
     }
+  }
+}
+```
+
+`calendar_update_event` para cambiar duracion y color del evento:
+
+```json
+{
+  "calendar_id": "primary",
+  "event_id": "<event_id>",
+  "event": {
+    "summary": "Evento desde Inspector actualizado",
+    "colorId": "11",
+    "start": {"dateTime": "2026-03-20T15:00:00Z"},
+    "end": {"dateTime": "2026-03-20T16:00:00Z"}
   }
 }
 ```
