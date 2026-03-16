@@ -37,6 +37,7 @@ class CalendarEventInput(BaseModel):
     summary: str
     description: str | None = None
     location: str | None = None
+    color_id: str | None = Field(default=None, alias="colorId")
     start: CalendarEventDateTime
     end: CalendarEventDateTime
     recurrence: list[str] | None = None

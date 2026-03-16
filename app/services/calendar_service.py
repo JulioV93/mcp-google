@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 from sqlalchemy.orm import Session
 
 from app.errors import AppError
@@ -24,6 +26,7 @@ class CalendarService:
         except AppError:
             raise
 
+        calendar_items = cast(list[dict[str, object]], payload.get("items") or [])
         calendars = [
             {
                 "id": item.get("id"),
@@ -31,7 +34,7 @@ class CalendarService:
                 "primary": item.get("primary", False),
                 "access_role": item.get("accessRole"),
             }
-            for item in payload.get("items", [])
+            for item in calendar_items
         ]
         return {"items": calendars}
 
@@ -56,7 +59,8 @@ class CalendarService:
         except AppError:
             raise
 
-        events = [_normalize_event(item, input_data.calendar_id) for item in payload.get("items", [])]
+        event_items = cast(list[dict[str, object]], payload.get("items") or [])
+        events = [_normalize_event(item, input_data.calendar_id) for item in event_items]
         return {
             "items": events,
             "next_page_token": payload.get("nextPageToken"),
@@ -147,6 +151,7 @@ def _normalize_event(payload: dict[str, object], calendar_id: str) -> dict[str, 
         "summary": payload.get("summary"),
         "description": payload.get("description"),
         "location": payload.get("location"),
+        "color_id": payload.get("colorId"),
         "status": payload.get("status"),
         "start": payload.get("start"),
         "end": payload.get("end"),
