@@ -4,12 +4,10 @@ import base64
 from email.message import EmailMessage
 
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session
 
-from app.config import Settings, get_settings
-from app.google.credentials import GoogleCredentialsProvider
-from app.google.errors import map_google_http_error
+from app.config import Settings
+from app.google.client_base import GoogleApiClientBase
 
 
 def build_raw_message(
@@ -37,11 +35,9 @@ def build_raw_message(
     return payload
 
 
-class GmailClient:
+class GmailClient(GoogleApiClientBase):
     def __init__(self, session: Session, settings: Settings | None = None) -> None:
-        self.session = session
-        self.settings = settings or get_settings()
-        self.credentials_provider = GoogleCredentialsProvider(session, self.settings)
+        super().__init__(session, settings)
 
     def _service(self, *, external_subject: str, tenant_id: str | None = None):
         credentials = self.credentials_provider.get_for_user(
@@ -65,10 +61,7 @@ class GmailClient:
             kwargs["q"] = query
         if page_token:
             kwargs["pageToken"] = page_token
-        try:
-            return service.users().messages().list(**kwargs).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.users().messages().list(**kwargs))
 
     def get_message(
         self,
@@ -79,13 +72,10 @@ class GmailClient:
         format: str = "metadata",
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            kwargs: dict[str, object] = {"userId": "me", "id": message_id, "format": format}
-            if format == "metadata":
-                kwargs["metadataHeaders"] = ["Subject", "From", "To"]
-            return service.users().messages().get(**kwargs).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        kwargs: dict[str, object] = {"userId": "me", "id": message_id, "format": format}
+        if format == "metadata":
+            kwargs["metadataHeaders"] = ["Subject", "From", "To"]
+        return self._execute(service.users().messages().get(**kwargs))
 
     def list_threads(
         self,
@@ -102,10 +92,7 @@ class GmailClient:
             kwargs["q"] = query
         if page_token:
             kwargs["pageToken"] = page_token
-        try:
-            return service.users().threads().list(**kwargs).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.users().threads().list(**kwargs))
 
     def create_draft(
         self,
@@ -115,10 +102,7 @@ class GmailClient:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            return service.users().drafts().create(userId="me", body={"message": message_body}).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.users().drafts().create(userId="me", body={"message": message_body}))
 
     def update_draft(
         self,
@@ -129,14 +113,13 @@ class GmailClient:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            return service.users().drafts().update(
+        return self._execute(
+            service.users().drafts().update(
                 userId="me",
                 id=draft_id,
                 body={"id": draft_id, "message": message_body},
-            ).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+            )
+        )
 
     def delete_draft(
         self,
@@ -146,10 +129,7 @@ class GmailClient:
         tenant_id: str | None = None,
     ) -> None:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            service.users().drafts().delete(userId="me", id=draft_id).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        self._execute(service.users().drafts().delete(userId="me", id=draft_id))
 
     def send_message(
         self,
@@ -159,10 +139,7 @@ class GmailClient:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            return service.users().messages().send(userId="me", body=message_body).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.users().messages().send(userId="me", body=message_body))
 
     def trash_message(
         self,
@@ -172,7 +149,4 @@ class GmailClient:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            return service.users().messages().trash(userId="me", id=message_id).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.users().messages().trash(userId="me", id=message_id))

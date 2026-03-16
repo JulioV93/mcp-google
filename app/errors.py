@@ -52,15 +52,23 @@ class UnauthorizedError(AppError):
 
 
 class RateLimitedError(AppError):
-    def __init__(self, detail: str, *, retry_after_seconds: int | None = None) -> None:
-        metadata = {"retry_after_seconds": retry_after_seconds} if retry_after_seconds is not None else None
+    def __init__(
+        self,
+        detail: str,
+        *,
+        retry_after_seconds: int | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        resolved_metadata = dict(metadata or {})
+        if retry_after_seconds is not None:
+            resolved_metadata["retry_after_seconds"] = retry_after_seconds
         super().__init__(
             "rate_limited",
             detail,
             status_code=429,
             retryable=True,
             category="rate_limit",
-            metadata=metadata,
+            metadata=resolved_metadata or None,
         )
 
 
@@ -80,6 +88,28 @@ class ProviderError(AppError):
             status_code=status_code,
             retryable=retryable,
             category="provider",
+            metadata=metadata,
+        )
+
+
+class ConflictProviderError(ProviderError):
+    def __init__(self, detail: str, *, metadata: dict[str, Any] | None = None) -> None:
+        super().__init__(
+            detail,
+            code="provider_conflict",
+            status_code=409,
+            retryable=False,
+            metadata=metadata,
+        )
+
+
+class PreconditionProviderError(ProviderError):
+    def __init__(self, detail: str, *, metadata: dict[str, Any] | None = None) -> None:
+        super().__init__(
+            detail,
+            code="provider_precondition_failed",
+            status_code=412,
+            retryable=False,
             metadata=metadata,
         )
 
