@@ -4,13 +4,11 @@ import base64
 import io
 
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 from sqlalchemy.orm import Session
 
-from app.config import Settings, get_settings
-from app.google.credentials import GoogleCredentialsProvider
-from app.google.errors import map_google_http_error
+from app.config import Settings
+from app.google.client_base import GoogleApiClientBase
 
 
 DRIVE_FILE_FIELDS = (
@@ -19,11 +17,9 @@ DRIVE_FILE_FIELDS = (
 )
 
 
-class DriveClient:
+class DriveClient(GoogleApiClientBase):
     def __init__(self, session: Session, settings: Settings | None = None) -> None:
-        self.session = session
-        self.settings = settings or get_settings()
-        self.credentials_provider = GoogleCredentialsProvider(session, self.settings)
+        super().__init__(session, settings)
 
     def _service(self, *, external_subject: str, tenant_id: str | None = None):
         credentials = self.credentials_provider.get_for_user(
@@ -52,34 +48,30 @@ class DriveClient:
             kwargs["q"] = query
         if page_token:
             kwargs["pageToken"] = page_token
-        try:
-            return service.files().list(**kwargs).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.files().list(**kwargs))
 
     def get_file(self, *, external_subject: str, file_id: str, tenant_id: str | None = None) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            return service.files().get(
+        return self._execute(
+            service.files().get(
                 fileId=file_id,
                 fields=DRIVE_FILE_FIELDS,
                 supportsAllDrives=True,
-            ).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+            )
+        )
 
     def download_file(self, *, external_subject: str, file_id: str, tenant_id: str | None = None) -> bytes:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
-        buffer = io.BytesIO()
-        downloader = MediaIoBaseDownload(buffer, request)
-        try:
+        def perform_download() -> bytes:
+            request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
+            buffer = io.BytesIO()
+            downloader = MediaIoBaseDownload(buffer, request)
             done = False
             while not done:
                 _, done = downloader.next_chunk()
             return buffer.getvalue()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+
+        return self._execute_operation(perform_download)
 
     def export_file(
         self,
@@ -90,16 +82,16 @@ class DriveClient:
         tenant_id: str | None = None,
     ) -> bytes:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        request = service.files().export_media(fileId=file_id, mimeType=export_mime_type)
-        buffer = io.BytesIO()
-        downloader = MediaIoBaseDownload(buffer, request)
-        try:
+        def perform_export() -> bytes:
+            request = service.files().export_media(fileId=file_id, mimeType=export_mime_type)
+            buffer = io.BytesIO()
+            downloader = MediaIoBaseDownload(buffer, request)
             done = False
             while not done:
                 _, done = downloader.next_chunk()
             return buffer.getvalue()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+
+        return self._execute_operation(perform_export)
 
     def create_folder(
         self,
@@ -116,10 +108,7 @@ class DriveClient:
         }
         if parent_id:
             body["parents"] = [parent_id]
-        try:
-            return service.files().create(body=body, fields=DRIVE_FILE_FIELDS, supportsAllDrives=True).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.files().create(body=body, fields=DRIVE_FILE_FIELDS, supportsAllDrives=True))
 
     def create_shortcut(
         self,
@@ -138,10 +127,7 @@ class DriveClient:
         }
         if parent_id:
             body["parents"] = [parent_id]
-        try:
-            return service.files().create(body=body, fields=DRIVE_FILE_FIELDS, supportsAllDrives=True).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.files().create(body=body, fields=DRIVE_FILE_FIELDS, supportsAllDrives=True))
 
     def update_metadata(
         self,
@@ -152,15 +138,14 @@ class DriveClient:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            return service.files().update(
+        return self._execute(
+            service.files().update(
                 fileId=file_id,
                 body=metadata_body,
                 fields=DRIVE_FILE_FIELDS,
                 supportsAllDrives=True,
-            ).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+            )
+        )
 
     def move_file(
         self,
@@ -181,10 +166,7 @@ class DriveClient:
             kwargs["addParents"] = add_parent_id
         if remove_parent_id:
             kwargs["removeParents"] = remove_parent_id
-        try:
-            return service.files().update(**kwargs).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.files().update(**kwargs))
 
     def upload_file(
         self,
@@ -201,15 +183,14 @@ class DriveClient:
         if parent_id:
             body["parents"] = [parent_id]
         media = MediaIoBaseUpload(io.BytesIO(content_bytes), mimetype=mime_type, resumable=False)
-        try:
-            return service.files().create(
+        return self._execute(
+            service.files().create(
                 body=body,
                 media_body=media,
                 fields=DRIVE_FILE_FIELDS,
                 supportsAllDrives=True,
-            ).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+            )
+        )
 
     def update_file_content(
         self,
@@ -222,15 +203,14 @@ class DriveClient:
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
         media = MediaIoBaseUpload(io.BytesIO(content_bytes), mimetype=mime_type, resumable=False)
-        try:
-            return service.files().update(
+        return self._execute(
+            service.files().update(
                 fileId=file_id,
                 media_body=media,
                 fields=DRIVE_FILE_FIELDS,
                 supportsAllDrives=True,
-            ).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+            )
+        )
 
     def trash_file(self, *, external_subject: str, file_id: str, tenant_id: str | None = None) -> dict[str, object]:
         return self.update_metadata(
@@ -248,10 +228,7 @@ class DriveClient:
         tenant_id: str | None = None,
     ) -> None:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        self._execute(service.files().delete(fileId=file_id, supportsAllDrives=True))
 
     def list_permissions(
         self,
@@ -261,14 +238,13 @@ class DriveClient:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            return service.permissions().list(
+        return self._execute(
+            service.permissions().list(
                 fileId=file_id,
                 fields="permissions(id,type,role,emailAddress,domain,allowFileDiscovery,displayName)",
                 supportsAllDrives=True,
-            ).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+            )
+        )
 
     def create_permission(
         self,
@@ -279,16 +255,15 @@ class DriveClient:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            return service.permissions().create(
+        return self._execute(
+            service.permissions().create(
                 fileId=file_id,
                 body=permission_body,
                 fields="id,type,role,emailAddress,domain,allowFileDiscovery,displayName",
                 supportsAllDrives=True,
                 sendNotificationEmail=False,
-            ).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+            )
+        )
 
     def delete_permission(
         self,
@@ -299,14 +274,13 @@ class DriveClient:
         tenant_id: str | None = None,
     ) -> None:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
+        self._execute(
             service.permissions().delete(
                 fileId=file_id,
                 permissionId=permission_id,
                 supportsAllDrives=True,
-            ).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+            )
+        )
 
 
 def encode_bytes_to_base64(content: bytes) -> str:

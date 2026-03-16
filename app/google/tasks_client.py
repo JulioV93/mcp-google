@@ -1,19 +1,15 @@
 from __future__ import annotations
 
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session
 
-from app.config import Settings, get_settings
-from app.google.credentials import GoogleCredentialsProvider
-from app.google.errors import map_google_http_error
+from app.config import Settings
+from app.google.client_base import GoogleApiClientBase
 
 
-class TasksClient:
+class TasksClient(GoogleApiClientBase):
     def __init__(self, session: Session, settings: Settings | None = None) -> None:
-        self.session = session
-        self.settings = settings or get_settings()
-        self.credentials_provider = GoogleCredentialsProvider(session, self.settings)
+        super().__init__(session, settings)
 
     def _service(self, *, external_subject: str, tenant_id: str | None = None):
         credentials = self.credentials_provider.get_for_user(
@@ -34,10 +30,7 @@ class TasksClient:
         kwargs: dict[str, object] = {"maxResults": max_results}
         if page_token:
             kwargs["pageToken"] = page_token
-        try:
-            return service.tasklists().list(**kwargs).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.tasklists().list(**kwargs))
 
     def create_tasklist(
         self,
@@ -47,10 +40,7 @@ class TasksClient:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            return service.tasklists().insert(body={"title": title}).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.tasklists().insert(body={"title": title}))
 
     def update_tasklist(
         self,
@@ -61,10 +51,7 @@ class TasksClient:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            return service.tasklists().patch(tasklist=tasklist_id, body={"title": title}).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.tasklists().patch(tasklist=tasklist_id, body={"title": title}))
 
     def delete_tasklist(
         self,
@@ -74,10 +61,7 @@ class TasksClient:
         tenant_id: str | None = None,
     ) -> None:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            service.tasklists().delete(tasklist=tasklist_id).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        self._execute(service.tasklists().delete(tasklist=tasklist_id))
 
     def list_tasks(
         self,
@@ -99,10 +83,7 @@ class TasksClient:
         }
         if page_token:
             kwargs["pageToken"] = page_token
-        try:
-            return service.tasks().list(**kwargs).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.tasks().list(**kwargs))
 
     def create_task(
         self,
@@ -113,10 +94,7 @@ class TasksClient:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            return service.tasks().insert(tasklist=tasklist_id, body=task_body).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.tasks().insert(tasklist=tasklist_id, body=task_body))
 
     def update_task(
         self,
@@ -128,10 +106,7 @@ class TasksClient:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            return service.tasks().patch(tasklist=tasklist_id, task=task_id, body=task_body).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.tasks().patch(tasklist=tasklist_id, task=task_id, body=task_body))
 
     def delete_task(
         self,
@@ -142,7 +117,4 @@ class TasksClient:
         tenant_id: str | None = None,
     ) -> None:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            service.tasks().delete(tasklist=tasklist_id, task=task_id).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        self._execute(service.tasks().delete(tasklist=tasklist_id, task=task_id))

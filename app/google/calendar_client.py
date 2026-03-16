@@ -1,19 +1,15 @@
 from __future__ import annotations
 
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session
 
-from app.config import Settings, get_settings
-from app.google.credentials import GoogleCredentialsProvider
-from app.google.errors import map_google_http_error
+from app.config import Settings
+from app.google.client_base import GoogleApiClientBase
 
 
-class CalendarClient:
+class CalendarClient(GoogleApiClientBase):
     def __init__(self, session: Session, settings: Settings | None = None) -> None:
-        self.session = session
-        self.settings = settings or get_settings()
-        self.credentials_provider = GoogleCredentialsProvider(session, self.settings)
+        super().__init__(session, settings)
 
     def _service(self, *, external_subject: str, tenant_id: str | None = None):
         credentials = self.credentials_provider.get_for_user(
@@ -24,10 +20,7 @@ class CalendarClient:
 
     def list_calendars(self, *, external_subject: str, tenant_id: str | None = None) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            return service.calendarList().list().execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.calendarList().list())
 
     def list_events(
         self,
@@ -56,10 +49,7 @@ class CalendarClient:
             kwargs["pageToken"] = page_token
         if query:
             kwargs["q"] = query
-        try:
-            return service.events().list(**kwargs).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.events().list(**kwargs))
 
     def get_event(
         self,
@@ -70,10 +60,7 @@ class CalendarClient:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            return service.events().get(calendarId=calendar_id, eventId=event_id).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.events().get(calendarId=calendar_id, eventId=event_id))
 
     def create_event(
         self,
@@ -84,10 +71,7 @@ class CalendarClient:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            return service.events().insert(calendarId=calendar_id, body=event_body).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        return self._execute(service.events().insert(calendarId=calendar_id, body=event_body))
 
     def update_event(
         self,
@@ -99,14 +83,13 @@ class CalendarClient:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            return service.events().patch(
+        return self._execute(
+            service.events().patch(
                 calendarId=calendar_id,
                 eventId=event_id,
                 body=event_body,
-            ).execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+            )
+        )
 
     def delete_event(
         self,
@@ -117,7 +100,4 @@ class CalendarClient:
         tenant_id: str | None = None,
     ) -> None:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        try:
-            service.events().delete(calendarId=calendar_id, eventId=event_id, sendUpdates="none").execute()
-        except HttpError as exc:
-            raise map_google_http_error(exc) from exc
+        self._execute(service.events().delete(calendarId=calendar_id, eventId=event_id, sendUpdates="none"))

@@ -84,6 +84,15 @@ class Settings(BaseSettings):
         ),
         validation_alias="GOOGLE_OAUTH_SCOPES",
     )
+    google_api_max_retries: int = Field(default=3, validation_alias="GOOGLE_API_MAX_RETRIES")
+    google_api_retry_base_delay_seconds: float = Field(
+        default=1.0,
+        validation_alias="GOOGLE_API_RETRY_BASE_DELAY_SECONDS",
+    )
+    google_api_retry_max_delay_seconds: float = Field(
+        default=8.0,
+        validation_alias="GOOGLE_API_RETRY_MAX_DELAY_SECONDS",
+    )
     drive_inline_content_limit_bytes: int = Field(
         default=262144,
         validation_alias="DRIVE_INLINE_CONTENT_LIMIT_BYTES",
