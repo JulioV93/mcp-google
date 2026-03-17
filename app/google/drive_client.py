@@ -13,7 +13,7 @@ from app.google.client_base import GoogleApiClientBase
 
 DRIVE_FILE_FIELDS = (
     "id,name,mimeType,parents,size,webViewLink,webContentLink,trashed,createdTime,modifiedTime,"
-    "description,owners(displayName,emailAddress),shortcutDetails,targetId"
+    "description,owners(displayName,emailAddress),shortcutDetails(targetId)"
 )
 
 
@@ -27,6 +27,20 @@ class DriveClient(GoogleApiClientBase):
             tenant_id=tenant_id,
         )
         return build("drive", "v3", credentials=credentials, cache_discovery=False)
+
+    def _docs_service(self, *, external_subject: str, tenant_id: str | None = None):
+        credentials = self.credentials_provider.get_for_user(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+        )
+        return build("docs", "v1", credentials=credentials, cache_discovery=False)
+
+    def _sheets_service(self, *, external_subject: str, tenant_id: str | None = None):
+        credentials = self.credentials_provider.get_for_user(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+        )
+        return build("sheets", "v4", credentials=credentials, cache_discovery=False)
 
     def list_files(
         self,
@@ -110,6 +124,24 @@ class DriveClient(GoogleApiClientBase):
             body["parents"] = [parent_id]
         return self._execute(service.files().create(body=body, fields=DRIVE_FILE_FIELDS, supportsAllDrives=True))
 
+    def create_native_file(
+        self,
+        *,
+        external_subject: str,
+        name: str,
+        mime_type: str,
+        parent_id: str | None = None,
+        tenant_id: str | None = None,
+    ) -> dict[str, object]:
+        service = self._service(external_subject=external_subject, tenant_id=tenant_id)
+        body: dict[str, object] = {
+            "name": name,
+            "mimeType": mime_type,
+        }
+        if parent_id:
+            body["parents"] = [parent_id]
+        return self._execute(service.files().create(body=body, fields=DRIVE_FILE_FIELDS, supportsAllDrives=True))
+
     def create_shortcut(
         self,
         *,
@@ -128,6 +160,142 @@ class DriveClient(GoogleApiClientBase):
         if parent_id:
             body["parents"] = [parent_id]
         return self._execute(service.files().create(body=body, fields=DRIVE_FILE_FIELDS, supportsAllDrives=True))
+
+    def write_google_doc(
+        self,
+        *,
+        external_subject: str,
+        file_id: str,
+        content_text: str,
+        mode: str,
+        tenant_id: str | None = None,
+    ) -> dict[str, object]:
+        service = self._docs_service(external_subject=external_subject, tenant_id=tenant_id)
+        document = self._execute(service.documents().get(documentId=file_id))
+        body_content = document.get("body", {}).get("content", []) if isinstance(document, dict) else []
+        current_end_index = 1
+        if isinstance(body_content, list):
+            for item in body_content:
+                if isinstance(item, dict):
+                    end_index = item.get("endIndex")
+                    if isinstance(end_index, int) and end_index > current_end_index:
+                        current_end_index = end_index
+        requests: list[dict[str, object]] = []
+        if mode == "replace" and current_end_index > 1:
+            requests.append(
+                {
+                    "deleteContentRange": {
+                        "range": {
+                            "startIndex": 1,
+                            "endIndex": max(1, current_end_index - 1),
+                        }
+                    }
+                }
+            )
+            insert_index = 1
+        else:
+            insert_index = max(1, current_end_index - 1)
+            if mode == "append" and insert_index > 1 and not content_text.startswith("\n"):
+                content_text = "\n" + content_text
+        requests.append({"insertText": {"location": {"index": insert_index}, "text": content_text}})
+        return self._execute(
+            service.documents().batchUpdate(
+                documentId=file_id,
+                body={"requests": requests},
+            )
+        )
+
+    def write_google_sheet(
+        self,
+        *,
+        external_subject: str,
+        file_id: str,
+        values: list[list[str | int | float | bool | None]],
+        sheet_name: str | None,
+        create_sheet_if_missing: bool,
+        start_cell: str,
+        mode: str,
+        tenant_id: str | None = None,
+    ) -> dict[str, object]:
+        service = self._sheets_service(external_subject=external_subject, tenant_id=tenant_id)
+        target_sheet_name = self._resolve_sheet_name(
+            external_subject=external_subject,
+            file_id=file_id,
+            sheet_name=sheet_name,
+            create_sheet_if_missing=create_sheet_if_missing,
+            tenant_id=tenant_id,
+        )
+        value_range = {"values": values}
+        range_name = f"{target_sheet_name}!{start_cell}"
+        if mode == "append":
+            return self._execute(
+                service.spreadsheets().values().append(
+                    spreadsheetId=file_id,
+                    range=range_name,
+                    valueInputOption="USER_ENTERED",
+                    insertDataOption="INSERT_ROWS",
+                    body=value_range,
+                )
+            )
+        return self._execute(
+            service.spreadsheets().values().update(
+                spreadsheetId=file_id,
+                range=range_name,
+                valueInputOption="USER_ENTERED",
+                body=value_range,
+            )
+        )
+
+    def _resolve_sheet_name(
+        self,
+        *,
+        external_subject: str,
+        file_id: str,
+        sheet_name: str | None,
+        create_sheet_if_missing: bool,
+        tenant_id: str | None = None,
+    ) -> str:
+        service = self._sheets_service(external_subject=external_subject, tenant_id=tenant_id)
+        spreadsheet = self._execute(
+            service.spreadsheets().get(
+                spreadsheetId=file_id,
+                fields="sheets(properties(title))",
+            )
+        )
+        sheets = spreadsheet.get("sheets", []) if isinstance(spreadsheet, dict) else []
+        titles: list[str] = []
+        if isinstance(sheets, list):
+            for item in sheets:
+                if isinstance(item, dict):
+                    properties = item.get("properties", {})
+                    if isinstance(properties, dict):
+                        title = properties.get("title")
+                        if isinstance(title, str) and title:
+                            titles.append(title)
+        if sheet_name:
+            if sheet_name in titles:
+                return sheet_name
+            if create_sheet_if_missing:
+                self._execute(
+                    service.spreadsheets().batchUpdate(
+                        spreadsheetId=file_id,
+                        body={
+                            "requests": [
+                                {
+                                    "addSheet": {
+                                        "properties": {
+                                            "title": sheet_name,
+                                        }
+                                    }
+                                }
+                            ]
+                        },
+                    )
+                )
+                return sheet_name
+        if titles:
+            return titles[0]
+        return "Sheet1"
 
     def update_metadata(
         self,

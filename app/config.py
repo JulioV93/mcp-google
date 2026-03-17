@@ -39,10 +39,14 @@ class Settings(BaseSettings):
     approval_required_tools: str = Field(
         default=(
             "gmail_send_email,"
+            "gmail_confirm_send_email,"
             "gmail_delete_message,"
             "calendar_delete_event,"
+            "calendar_confirm_delete_event,"
             "tasks_delete_task,"
             "tasks_delete_tasklist,"
+            "tasks_confirm_delete_task,"
+            "tasks_confirm_delete_tasklist,"
             "drive_confirm_upload,"
             "drive_confirm_save_file,"
             "drive_confirm_delete_file,"
@@ -79,6 +83,8 @@ class Settings(BaseSettings):
             "https://www.googleapis.com/auth/gmail.compose,"
             "https://www.googleapis.com/auth/gmail.modify,"
             "https://www.googleapis.com/auth/drive,"
+            "https://www.googleapis.com/auth/documents,"
+            "https://www.googleapis.com/auth/spreadsheets,"
             "openid,https://www.googleapis.com/auth/userinfo.email,"
             "https://www.googleapis.com/auth/userinfo.profile"
         ),

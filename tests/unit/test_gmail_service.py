@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import Mock
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.config import Settings
+from app.db.base import Base
 from app.google.gmail_client import build_raw_message
 from app.schemas.gmail import (
+    GmailConfirmSendEmailInput,
     GmailCreateDraftInput,
     GmailDeleteMessageInput,
     GmailGetMessageInput,
@@ -12,6 +19,13 @@ from app.schemas.gmail import (
     GmailSendEmailInput,
 )
 from app.services.gmail_service import GmailService
+
+
+def create_test_session() -> Session:
+    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    return session_factory()
 
 
 def test_build_raw_message_contains_thread_id_when_present() -> None:
@@ -39,9 +53,11 @@ def test_list_messages_normalizes_payload() -> None:
         external_subject="user-1",
         input_data=GmailListMessagesInput(),
     )
+    items = cast(list[dict[str, object]], result["items"])
 
     assert result["next_page_token"] == "next-msg"
-    assert result["items"][0]["id"] == "msg-1"
+    assert result["resource_identity"] == {"type": "gmail_message_collection"}
+    assert items[0]["id"] == "msg-1"
 
 
 def test_get_message_extracts_headers() -> None:
@@ -68,6 +84,11 @@ def test_get_message_extracts_headers() -> None:
         input_data=GmailGetMessageInput(message_id="msg-2"),
     )
 
+    assert result["resource_identity"] == {
+        "type": "gmail_message",
+        "message_id": "msg-2",
+        "thread_id": "thr-2",
+    }
     assert result["subject"] == "Status"
     assert result["from"] == "sender@example.com"
     assert result["to"] == "user@example.com"
@@ -101,14 +122,20 @@ def test_create_draft_normalizes_response() -> None:
     )
 
     result = service.create_draft(external_subject="user-1", input_data=payload)
+    message = cast(dict[str, object], result["message"])
 
     assert result["id"] == "draft-1"
-    assert result["message"]["subject"] == "Draft subject"
+    assert result["resource_identity"] == {
+        "type": "gmail_draft",
+        "draft_id": "draft-1",
+        "message_id": "msg-3",
+    }
+    assert message["subject"] == "Draft subject"
 
 
 def test_send_and_trash_message_return_expected_shape() -> None:
-    session = Mock()
-    service = GmailService(session)
+    session = create_test_session()
+    service = GmailService(session, settings=Settings())
     service.client = Mock()
     service.client.send_message.return_value = {
         "id": "msg-sent",
@@ -130,8 +157,18 @@ def test_send_and_trash_message_return_expected_shape() -> None:
     )
     send_result = service.send_email(external_subject="user-1", input_data=send_payload)
 
-    assert send_result["id"] == "msg-sent"
-    assert send_result["thread_id"] == "thr-sent"
+    assert send_result["requires_confirmation"] is True
+    operation_id = cast(str, send_result["operation_id"])
+
+    confirm_result = service.confirm_send_email(
+        external_subject="user-1",
+        input_data=GmailConfirmSendEmailInput(operation_id=operation_id),
+    )
+
+    assert confirm_result["id"] == "msg-sent"
+    assert confirm_result["thread_id"] == "thr-sent"
+    assert confirm_result["safety_level"] == "destructive"
+    assert confirm_result["confirmed"] is True
 
     delete_result = service.delete_message(
         external_subject="user-1",
@@ -142,4 +179,8 @@ def test_send_and_trash_message_return_expected_shape() -> None:
         "message_id": "msg-sent",
         "thread_id": "thr-sent",
         "label_ids": ["TRASH"],
+        "resource_identity": {"type": "gmail_message", "message_id": "msg-sent", "thread_id": "thr-sent"},
+        "human_summary": "Moved Gmail message 'msg-sent' to trash.",
+        "next_suggested_actions": ["gmail_list_messages", "gmail_list_threads"],
+        "safety_level": "destructive",
     }

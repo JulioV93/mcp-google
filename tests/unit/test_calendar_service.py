@@ -3,8 +3,15 @@ from __future__ import annotations
 from typing import cast
 from unittest.mock import Mock
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.config import Settings
+from app.db.base import Base
 from app.schemas.calendar import (
+    CalendarConfirmDeleteEventInput,
     CalendarCreateEventInput,
+    CalendarDeleteEventInput,
     CalendarEventDateTime,
     CalendarEventInput,
     CalendarEventReminderOverride,
@@ -13,6 +20,13 @@ from app.schemas.calendar import (
     CalendarUpdateEventInput,
 )
 from app.services.calendar_service import CalendarService
+
+
+def create_test_session() -> Session:
+    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    return session_factory()
 
 
 def test_list_events_normalizes_payload() -> None:
@@ -47,6 +61,8 @@ def test_list_events_normalizes_payload() -> None:
     reminders = cast(dict[str, object], first_event["reminders"])
 
     assert result["next_page_token"] == "next-123"
+    assert result["resource_identity"] == {"type": "calendar_event_collection", "calendar_id": "primary"}
+    assert result["safety_level"] == "read"
     assert first_event["id"] == "evt-1"
     assert first_event["calendar_id"] == "primary"
     assert first_event["color_id"] == "5"
@@ -91,6 +107,12 @@ def test_create_event_passes_serialized_body() -> None:
     reminders = cast(dict[str, object], create_result["reminders"])
 
     assert create_result["id"] == "evt-2"
+    assert create_result["resource_identity"] == {
+        "type": "calendar_event",
+        "calendar_id": "primary",
+        "event_id": "evt-2",
+    }
+    assert create_result["safety_level"] == "write"
     assert create_result["color_id"] == "11"
     assert create_result["recurrence"] == ["RRULE:FREQ=DAILY"]
     assert reminders["useDefault"] is False
@@ -150,6 +172,11 @@ def test_update_event_passes_recurrence_and_reminders() -> None:
     reminders = cast(dict[str, object], update_result["reminders"])
 
     assert update_result["id"] == "evt-3"
+    assert update_result["resource_identity"] == {
+        "type": "calendar_event",
+        "calendar_id": "primary",
+        "event_id": "evt-3",
+    }
     assert update_result["color_id"] == "3"
     assert update_result["recurrence"] == ["RRULE:FREQ=DAILY"]
     assert reminders["useDefault"] is False
@@ -169,4 +196,43 @@ def test_update_event_passes_recurrence_and_reminders() -> None:
                 "overrides": [{"method": "popup", "minutes": 5}],
             },
         },
+    )
+
+
+def test_delete_event_requires_confirmation_and_confirm_executes() -> None:
+    session = create_test_session()
+    service = CalendarService(session, settings=Settings())
+    service.client = Mock()
+    service.client.get_event.return_value = {
+        "id": "evt-9",
+        "summary": "Delete me",
+        "start": {"dateTime": "2026-03-14T08:00:00-03:00"},
+        "end": {"dateTime": "2026-03-14T08:10:00-03:00"},
+    }
+
+    prepare = service.delete_event(
+        external_subject="user-1",
+        input_data=CalendarDeleteEventInput(calendar_id="primary", event_id="evt-9"),
+    )
+
+    assert prepare["requires_confirmation"] is True
+    operation_id = cast(str, prepare["operation_id"])
+
+    confirm = service.confirm_delete_event(
+        external_subject="user-1",
+        input_data=CalendarConfirmDeleteEventInput(operation_id=operation_id),
+    )
+
+    assert confirm["confirmed"] is True
+    assert confirm["deleted"] is True
+    assert confirm["resource_identity"] == {
+        "type": "calendar_event",
+        "calendar_id": "primary",
+        "event_id": "evt-9",
+    }
+    service.client.delete_event.assert_called_once_with(
+        external_subject="user-1",
+        tenant_id=None,
+        calendar_id="primary",
+        event_id="evt-9",
     )

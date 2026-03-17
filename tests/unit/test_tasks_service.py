@@ -1,15 +1,32 @@
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import Mock
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
+from app.config import Settings
+from app.db.base import Base
 from app.schemas.tasks import (
     TaskInput,
+    TasksConfirmDeleteTaskInput,
+    TasksConfirmDeleteTasklistInput,
     TasksCompleteTaskInput,
     TasksCreateTaskInput,
     TasksCreateTasklistInput,
+    TasksDeleteTaskInput,
+    TasksDeleteTasklistInput,
     TasksListTasklistsInput,
 )
 from app.services.tasks_service import TasksService
+
+
+def create_test_session() -> Session:
+    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    return session_factory()
 
 
 def test_list_tasklists_normalizes_payload() -> None:
@@ -32,9 +49,11 @@ def test_list_tasklists_normalizes_payload() -> None:
         external_subject="user-1",
         input_data=TasksListTasklistsInput(),
     )
+    items = cast(list[dict[str, object]], result["items"])
 
     assert result["next_page_token"] == "next-lists"
-    assert result["items"][0]["id"] == "list-1"
+    assert result["resource_identity"] == {"type": "tasklist_collection"}
+    assert items[0]["id"] == "list-1"
 
 
 def test_create_task_serializes_task_payload() -> None:
@@ -56,6 +75,7 @@ def test_create_task_serializes_task_payload() -> None:
 
     assert result["id"] == "task-1"
     assert result["tasklist_id"] == "list-1"
+    assert result["resource_identity"] == {"type": "task", "tasklist_id": "list-1", "task_id": "task-1"}
     service.client.create_task.assert_called_once()
 
 
@@ -79,4 +99,73 @@ def test_complete_task_marks_task_completed() -> None:
     result = service.complete_task(external_subject="user-1", input_data=payload)
 
     assert result["status"] == "completed"
+    assert result["safety_level"] == "write"
     service.client.update_task.assert_called_once()
+
+
+def test_delete_task_requires_confirmation_and_confirm_executes() -> None:
+    session = create_test_session()
+    service = TasksService(session, settings=Settings())
+    service.client = Mock()
+    service.client.get_task.return_value = {
+        "id": "task-9",
+        "title": "Remove me",
+        "status": "needsAction",
+    }
+
+    prepare = service.delete_task(
+        external_subject="user-1",
+        input_data=TasksDeleteTaskInput(tasklist_id="list-1", task_id="task-9"),
+    )
+
+    assert prepare["requires_confirmation"] is True
+    operation_id = cast(str, prepare["operation_id"])
+
+    confirm = service.confirm_delete_task(
+        external_subject="user-1",
+        input_data=TasksConfirmDeleteTaskInput(operation_id=operation_id),
+    )
+
+    assert confirm["confirmed"] is True
+    assert confirm["resource_identity"] == {
+        "type": "task",
+        "tasklist_id": "list-1",
+        "task_id": "task-9",
+    }
+    service.client.delete_task.assert_called_once_with(
+        external_subject="user-1",
+        tenant_id=None,
+        tasklist_id="list-1",
+        task_id="task-9",
+    )
+
+
+def test_delete_tasklist_requires_confirmation_and_confirm_executes() -> None:
+    session = create_test_session()
+    service = TasksService(session, settings=Settings())
+    service.client = Mock()
+    service.client.get_tasklist.return_value = {
+        "id": "list-9",
+        "title": "Archive",
+    }
+
+    prepare = service.delete_tasklist(
+        external_subject="user-1",
+        input_data=TasksDeleteTasklistInput(tasklist_id="list-9"),
+    )
+
+    assert prepare["requires_confirmation"] is True
+    operation_id = cast(str, prepare["operation_id"])
+
+    confirm = service.confirm_delete_tasklist(
+        external_subject="user-1",
+        input_data=TasksConfirmDeleteTasklistInput(operation_id=operation_id),
+    )
+
+    assert confirm["confirmed"] is True
+    assert confirm["resource_identity"] == {"type": "tasklist", "tasklist_id": "list-9"}
+    service.client.delete_tasklist.assert_called_once_with(
+        external_subject="user-1",
+        tenant_id=None,
+        tasklist_id="list-9",
+    )

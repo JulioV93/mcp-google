@@ -76,6 +76,8 @@ Nunca se debe aceptar `user_id`, `external_subject` o `google_email` desde los a
 - `https://www.googleapis.com/auth/gmail.compose`
 - `https://www.googleapis.com/auth/gmail.modify`
 - `https://www.googleapis.com/auth/drive`
+- `https://www.googleapis.com/auth/documents`
+- `https://www.googleapis.com/auth/spreadsheets`
 
 No se recomienda usar `https://mail.google.com/` en v1 salvo necesidad real.
 

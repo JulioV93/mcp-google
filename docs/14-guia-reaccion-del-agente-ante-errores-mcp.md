@@ -36,6 +36,10 @@ Campos:
 - `retryable`: indica si conviene reintentar automaticamente
 - `category`: clasificacion general del error
 - `metadata`: datos adicionales utiles en algunos casos
+- `hint`: sugerencia correctiva lista para usar si existe
+- `expected_fields`: campos que faltan o se esperan en el payload
+- `example_payload`: payload minimo sugerido para corregir el error
+- `recommended_tool`: tool mas adecuada cuando el error revela mal uso de la tool actual
 
 ## Regla principal para el agente
 
@@ -156,14 +160,18 @@ Que significa:
 Que debe hacer el agente:
 
 1. revisar argumentos
-2. corregir el payload
-3. reintentar una sola vez con el payload corregido
+2. si existe `expected_fields`, usarlo como checklist minimo
+3. si existe `example_payload`, usarlo como referencia de correccion
+4. si existe `recommended_tool`, evaluar cambiar a esa tool
+5. corregir el payload
+6. reintentar una sola vez con el payload corregido
 
 Ejemplos:
 
 - `calendar_create_event` sin `start`
 - `gmail_create_draft` sin `subject`
 - callback OAuth sin `state` o `code`
+- intentar simular recurrencia creando muchos eventos en lugar de usar `event.recurrence`
 
 ### `unauthorized_client`
 
@@ -195,8 +203,71 @@ Que debe hacer el agente:
 Ejemplos tipicos:
 
 - `gmail_send_email`
+- `gmail_confirm_send_email`
 - `gmail_delete_message`
 - `calendar_delete_event`
+- `calendar_confirm_delete_event`
+- `tasks_confirm_delete_task`
+- `tasks_confirm_delete_tasklist`
+
+## Reaccion ante operaciones con prepare/confirm
+
+Varias acciones sensibles ya no ejecutan el cambio en un solo paso. El agente debe distinguir entre:
+
+- tool de preparacion: devuelve preview y `operation_id`
+- tool de confirmacion: ejecuta realmente la mutacion
+
+### Regla principal
+
+Si una tool devuelve:
+
+- `requires_confirmation=true`
+- `operation_id`
+
+entonces el agente no debe considerar la accion como ejecutada todavia.
+
+Debe:
+
+1. leer `human_summary`
+2. revisar `summary`
+3. guardar `operation_id`
+4. ejecutar solo la tool de confirmacion sugerida en `next_suggested_actions`
+
+No debe:
+
+- asumir que el recurso ya fue borrado o enviado
+- volver a preparar la misma operacion sin necesidad
+- inventar una confirmacion manual fuera de la tool correspondiente
+
+### Calendar
+
+- `calendar_delete_event` prepara el borrado
+- `calendar_confirm_delete_event` ejecuta el borrado
+
+### Tasks
+
+- `tasks_delete_task` prepara el borrado
+- `tasks_confirm_delete_task` ejecuta el borrado
+- `tasks_delete_tasklist` prepara el borrado
+- `tasks_confirm_delete_tasklist` ejecuta el borrado
+
+### Gmail
+
+- `gmail_send_email` prepara el envio
+- `gmail_confirm_send_email` ejecuta el envio real
+
+### Drive
+
+- `drive_prepare_*` prepara la accion
+- `drive_confirm_*` ejecuta la accion
+
+### Ejemplo correcto de razonamiento
+
+```text
+La tool `gmail_send_email` no envio el correo todavia.
+Devolvio `requires_confirmation=true` y un `operation_id`.
+El siguiente paso correcto es ejecutar `gmail_confirm_send_email` con ese `operation_id`.
+```
 
 ### `origin_not_allowed`
 
@@ -379,6 +450,7 @@ Revisar especialmente:
 - `event_id`
 - `recurrence`
 - `reminders`
+- si recibiste `operation_id`, confirmar con `calendar_confirm_delete_event`
 
 ### Si la tool era de Tasks
 
@@ -387,6 +459,7 @@ Revisar especialmente:
 - `tasklist_id`
 - `task_id`
 - payload permitido por schema
+- si recibiste `operation_id`, confirmar con la tool `tasks_confirm_*` correspondiente
 
 ### Si la tool era de Gmail
 
@@ -395,6 +468,7 @@ Revisar especialmente:
 - scopes concedidos
 - `message_id` o `draft_id`
 - direcciones de email validas
+- si el envio devolvio preview, ejecutar `gmail_confirm_send_email` con `operation_id`
 
 ## Que debe reportar el agente al usuario
 
@@ -408,9 +482,9 @@ Siempre que falle una tool, el agente deberia incluir:
 Ejemplo bueno:
 
 ```text
-No pude enviar el correo porque el MCP devolvio `approval_required`.
+No pude confirmar el envio del correo porque el MCP devolvio `approval_required`.
 La accion no es reintentable automaticamente.
-Necesitas aprobar la tool `gmail_send_email` y volver a emitir el JWT con `approved_tools`.
+Necesitas aprobar la tool `gmail_confirm_send_email` y volver a emitir el JWT con `approved_tools`.
 ```
 
 ## Checklist minima para implementar en un agente

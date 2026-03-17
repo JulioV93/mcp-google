@@ -53,7 +53,7 @@ RATE_LIMIT_RPM=120
 LOG_LEVEL=INFO
 LOG_JSON=false
 REQUIRE_EXPLICIT_APPROVAL=false
-APPROVAL_REQUIRED_TOOLS=gmail_send_email,gmail_delete_message,calendar_delete_event,tasks_delete_task,tasks_delete_tasklist
+APPROVAL_REQUIRED_TOOLS=gmail_send_email,gmail_confirm_send_email,gmail_delete_message,calendar_delete_event,calendar_confirm_delete_event,tasks_delete_task,tasks_confirm_delete_task,tasks_delete_tasklist,tasks_confirm_delete_tasklist
 MCP_SERVER_NAME=google-mcp-server
 MCP_SERVER_VERSION=0.1.0
 MCP_PATH=/mcp
@@ -63,7 +63,25 @@ JWT_TEST_TOKEN=local-dev-token
 JWT_TEST_MODE=true
 JWT_TEST_SUBJECT=local-dev-user
 GOOGLE_ID_TOKEN_CLOCK_SKEW_SECONDS=10
+GOOGLE_API_MAX_RETRIES=3
+GOOGLE_API_RETRY_BASE_DELAY_SECONDS=1.0
+GOOGLE_API_RETRY_MAX_DELAY_SECONDS=8.0
 ```
+
+## Settings de retry para Google APIs
+
+El servidor ahora incluye reintentos automaticos para errores temporales o de cuota devueltos por Google.
+
+- `GOOGLE_API_MAX_RETRIES`: cantidad maxima de reintentos adicionales por request
+- `GOOGLE_API_RETRY_BASE_DELAY_SECONDS`: base del backoff exponencial
+- `GOOGLE_API_RETRY_MAX_DELAY_SECONDS`: techo del backoff truncado
+
+Notas utiles:
+
+- si Google devuelve `Retry-After`, ese valor se respeta antes que el backoff calculado
+- `403 rateLimitExceeded` y `429 rateLimitExceeded` se tratan como errores recuperables
+- `quotaExceeded` y `userRateLimitExceeded` tambien se clasifican como `rate_limited`
+- `backendError` y otros `5xx` se reintentan automaticamente hasta agotar el limite configurado
 
 ## Levantar el servidor
 

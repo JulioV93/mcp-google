@@ -102,7 +102,13 @@
 
 ### `calendar_delete_event`
 
-- elimina un evento
+- prepara el borrado de un evento
+- devuelve `operation_id` y preview para confirmacion
+- no elimina inmediatamente
+
+### `calendar_confirm_delete_event`
+
+- confirma el borrado de un evento preparado
 - operacion sensible y auditada
 
 ## Tools MCP de Google Tasks
@@ -113,6 +119,7 @@
 - `tasks_create_tasklist`
 - `tasks_update_tasklist`
 - `tasks_delete_tasklist`
+- `tasks_confirm_delete_tasklist`
 
 ### Tasks
 
@@ -121,6 +128,7 @@
 - `tasks_update_task`
 - `tasks_complete_task`
 - `tasks_delete_task`
+- `tasks_confirm_delete_task`
 
 ## Tools MCP de Gmail
 
@@ -139,6 +147,7 @@
 ### Acciones de salida
 
 - `gmail_send_email`
+- `gmail_confirm_send_email`
 - `gmail_delete_message`
 
 ## Tools MCP de Google Drive
@@ -155,16 +164,32 @@
 ### Mutacion simple
 
 - `drive_create_folder`
+- `drive_create_google_doc`
+- `drive_create_google_sheet`
+- `drive_create_google_slide`
 - `drive_create_shortcut`
 - `drive_update_metadata`
 - `drive_move_file`
 
 ### Mutacion sensible con doble validacion
 
+- `calendar_delete_event`
+- `calendar_confirm_delete_event`
+- `tasks_delete_task`
+- `tasks_confirm_delete_task`
+- `tasks_delete_tasklist`
+- `tasks_confirm_delete_tasklist`
+- `gmail_send_email`
+- `gmail_confirm_send_email`
 - `drive_prepare_upload`
+- `drive_prepare_upload_markdown`
 - `drive_confirm_upload`
 - `drive_prepare_save_file`
 - `drive_confirm_save_file`
+- `drive_prepare_write_google_doc`
+- `drive_confirm_write_google_doc`
+- `drive_prepare_write_google_sheet`
+- `drive_confirm_write_google_sheet`
 - `drive_prepare_delete_file`
 - `drive_confirm_delete_file`
 - `drive_prepare_share_file`
@@ -176,7 +201,7 @@
 
 - Gmail no debe tratarse como CRUD puro sobre mensajes ya existentes.
 - En v1, la entidad editable principal es el draft.
-- El envio se trata como accion separada.
+- El envio se trata como accion separada con flujo prepare/confirm.
 - `gmail_delete_message` en v1 envia el mensaje a la papelera; no realiza borrado permanente.
 - El borrado debe auditarse de forma reforzada.
 
@@ -189,6 +214,10 @@ Las respuestas deben ser pequenas, consistentes y legibles por un agente:
 - resumen o snippet corto
 - links cuando existan
 - `next_page_token` cuando aplique
+- `resource_identity`
+- `human_summary`
+- `next_suggested_actions`
+- `safety_level`
 
 ## Campos recomendados en respuestas
 
@@ -225,3 +254,36 @@ Las respuestas deben ser pequenas, consistentes y legibles por un agente:
 - no devolver payloads enormes por defecto
 - no devolver cuerpos completos de correo salvo que la tool lo requiera claramente
 - mantener formato de error estable
+
+## Contrato de errores Google
+
+- Todas las integraciones Google comparten un mapeo centralizado en `app/google/errors.py`.
+- La clasificacion ya no depende solo del status HTTP; prioriza `error.errors[].reason` devuelto por Google.
+- Las tools siguen devolviendo un contrato MCP estable con `error`, `detail`, `retryable`, `category` y `metadata` cuando aplique.
+
+### Razones Google tratadas de forma explicita
+
+- `rateLimitExceeded`, `userRateLimitExceeded`, `quotaExceeded`, `dailyLimitExceeded` -> `rate_limited`
+- `backendError` y errores `5xx` -> `provider_temporary_error`
+- `insufficientPermissions`, `forbidden`, `forbiddenForNonOrganizer` -> `insufficient_scope`
+- `authError` o `401` -> `google_consent_required`
+- `notFound` o `404` -> `resource_not_found`
+- `duplicate`, `conflict` o `409` -> `provider_conflict`
+- `conditionNotMet` o `412` -> `provider_precondition_failed`
+
+### Metadata relevante de proveedor
+
+- `provider`: proveedor origen, por ejemplo `google`
+- `provider_status_code`: status HTTP original devuelto por Google
+- `provider_error_code`: codigo incluido dentro del payload JSON de Google
+- `provider_reason`: razon oficial de Google usada para clasificar el error
+- `provider_domain`: dominio del error, por ejemplo `usageLimits` o `global`
+- `provider_message`: mensaje legible devuelto por Google
+- `retry_after_seconds`: valor de `Retry-After` si Google lo envia
+
+### Politica de retry
+
+- Las llamadas Google usan un helper comun de ejecucion para `Calendar`, `Gmail`, `Drive` y `Tasks`.
+- Si el error es `retryable`, el cliente aplica truncated exponential backoff con jitter.
+- Si Google devuelve `Retry-After`, ese valor tiene prioridad sobre el backoff calculado.
+- Si se agota el presupuesto de reintentos, se propaga el ultimo error ya clasificado al contrato MCP.

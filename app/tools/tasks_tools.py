@@ -3,6 +3,8 @@ from __future__ import annotations
 from fastmcp import FastMCP
 
 from app.schemas.tasks import (
+    TasksConfirmDeleteTaskInput,
+    TasksConfirmDeleteTasklistInput,
     TasksCompleteTaskInput,
     TasksCreateTaskInput,
     TasksCreateTasklistInput,
@@ -20,7 +22,10 @@ from app.tools.common import run_tool
 def register_tasks_tools(mcp: FastMCP) -> None:
     @mcp.tool
     def tasks_list_tasklists(max_results: int = 100, page_token: str | None = None) -> dict[str, object]:
-        """List Google task lists for the current user."""
+        """List Google task lists for the current user.
+
+        Use this first when the user names a list but you do not yet know its `tasklist_id`.
+        """
         payload = TasksListTasklistsInput(max_results=max_results, page_token=page_token)
         return run_tool(
             tool_name="tasks_list_tasklists",
@@ -36,7 +41,10 @@ def register_tasks_tools(mcp: FastMCP) -> None:
 
     @mcp.tool
     def tasks_create_tasklist(title: str) -> dict[str, object]:
-        """Create a Google task list."""
+        """Create a Google task list.
+
+        Use when the user wants a new task container such as a project list or routine list.
+        """
         payload = TasksCreateTasklistInput(title=title)
         return run_tool(
             tool_name="tasks_create_tasklist",
@@ -52,7 +60,10 @@ def register_tasks_tools(mcp: FastMCP) -> None:
 
     @mcp.tool
     def tasks_update_tasklist(tasklist_id: str, title: str) -> dict[str, object]:
-        """Update a Google task list."""
+        """Update a Google task list.
+
+        Use when the user wants to rename an existing task list and you already know its ID.
+        """
         payload = TasksUpdateTasklistInput(tasklist_id=tasklist_id, title=title)
         return run_tool(
             tool_name="tasks_update_tasklist",
@@ -68,7 +79,11 @@ def register_tasks_tools(mcp: FastMCP) -> None:
 
     @mcp.tool
     def tasks_delete_tasklist(tasklist_id: str) -> dict[str, object]:
-        """Delete a Google task list."""
+        """Prepare deletion of a Google task list.
+
+        This does not delete immediately. It returns an operation preview and `operation_id`.
+        Use `tasks_confirm_delete_tasklist` after review to execute the deletion.
+        """
         payload = TasksDeleteTasklistInput(tasklist_id=tasklist_id)
         return run_tool(
             tool_name="tasks_delete_tasklist",
@@ -83,6 +98,22 @@ def register_tasks_tools(mcp: FastMCP) -> None:
         )
 
     @mcp.tool
+    def tasks_confirm_delete_tasklist(operation_id: str) -> dict[str, object]:
+        """Confirm deletion of a prepared Google task list."""
+        payload = TasksConfirmDeleteTasklistInput(operation_id=operation_id)
+        return run_tool(
+            tool_name="tasks_confirm_delete_tasklist",
+            provider="google",
+            resource_type="tasklist",
+            arguments=payload.model_dump(exclude_none=True),
+            operation=lambda session, context: TasksService(session).confirm_delete_tasklist(
+                external_subject=context.subject,
+                tenant_id=context.tenant_id,
+                input_data=payload,
+            ),
+        )
+
+    @mcp.tool
     def tasks_list_tasks(
         tasklist_id: str,
         max_results: int = 100,
@@ -90,7 +121,10 @@ def register_tasks_tools(mcp: FastMCP) -> None:
         show_completed: bool = True,
         show_hidden: bool = False,
     ) -> dict[str, object]:
-        """List Google tasks from a task list."""
+        """List Google tasks from a task list.
+
+        Use before update, complete, or delete when you need to locate a task ID.
+        """
         payload = TasksListTasksInput(
             tasklist_id=tasklist_id,
             max_results=max_results,
@@ -112,7 +146,10 @@ def register_tasks_tools(mcp: FastMCP) -> None:
 
     @mcp.tool
     def tasks_create_task(tasklist_id: str, task: dict[str, object] | None = None) -> dict[str, object]:
-        """Create a Google task."""
+        """Create a Google task.
+
+        Use for new tasks with title, notes, or due date.
+        """
         payload = TasksCreateTaskInput.model_validate({"tasklist_id": tasklist_id, "task": task or {}})
         return run_tool(
             tool_name="tasks_create_task",
@@ -128,7 +165,11 @@ def register_tasks_tools(mcp: FastMCP) -> None:
 
     @mcp.tool
     def tasks_update_task(tasklist_id: str, task_id: str, task: dict[str, object] | None = None) -> dict[str, object]:
-        """Update a Google task."""
+        """Update a Google task.
+
+        Use for changing task title, notes, or due date.
+        If the user wants to mark a task done, prefer `tasks_complete_task`.
+        """
         payload = TasksUpdateTaskInput.model_validate(
             {"tasklist_id": tasklist_id, "task_id": task_id, "task": task or {}}
         )
@@ -146,7 +187,10 @@ def register_tasks_tools(mcp: FastMCP) -> None:
 
     @mcp.tool
     def tasks_complete_task(tasklist_id: str, task_id: str, completed: str | None = None) -> dict[str, object]:
-        """Mark a Google task as completed."""
+        """Mark a Google task as completed.
+
+        Prefer this over `tasks_update_task` when the user intent is to finish or close a task.
+        """
         payload = TasksCompleteTaskInput(tasklist_id=tasklist_id, task_id=task_id, completed=completed)
         return run_tool(
             tool_name="tasks_complete_task",
@@ -162,7 +206,11 @@ def register_tasks_tools(mcp: FastMCP) -> None:
 
     @mcp.tool
     def tasks_delete_task(tasklist_id: str, task_id: str) -> dict[str, object]:
-        """Delete a Google task."""
+        """Prepare deletion of a Google task.
+
+        This does not delete immediately. It returns an operation preview and `operation_id`.
+        Use `tasks_confirm_delete_task` after review to execute the deletion.
+        """
         payload = TasksDeleteTaskInput(tasklist_id=tasklist_id, task_id=task_id)
         return run_tool(
             tool_name="tasks_delete_task",
@@ -170,6 +218,22 @@ def register_tasks_tools(mcp: FastMCP) -> None:
             resource_type="task",
             arguments=payload.model_dump(exclude_none=True),
             operation=lambda session, context: TasksService(session).delete_task(
+                external_subject=context.subject,
+                tenant_id=context.tenant_id,
+                input_data=payload,
+            ),
+        )
+
+    @mcp.tool
+    def tasks_confirm_delete_task(operation_id: str) -> dict[str, object]:
+        """Confirm deletion of a prepared Google task."""
+        payload = TasksConfirmDeleteTaskInput(operation_id=operation_id)
+        return run_tool(
+            tool_name="tasks_confirm_delete_task",
+            provider="google",
+            resource_type="task",
+            arguments=payload.model_dump(exclude_none=True),
+            operation=lambda session, context: TasksService(session).confirm_delete_task(
                 external_subject=context.subject,
                 tenant_id=context.tenant_id,
                 input_data=payload,

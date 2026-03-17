@@ -17,6 +17,12 @@ Este directorio separa la planificacion acordada para el servidor MCP multiusuar
 - `docs/11-guia-tecnica-de-pruebas.md`: herramientas recomendadas y estrategia tecnica por capa de prueba.
 - `docs/12-plantilla-env-pruebas-reales.md`: referencia para construir un `.env` realista para pruebas manuales.
 
+## Cambios recientes relevantes
+
+- Se documento el nuevo manejo centralizado de errores Google en `docs/03-modelo-de-datos-y-tools.md`.
+- Se agregaron settings y notas operativas para retries Google en `docs/06-guia-desarrollo-local.md`.
+- Se amplio la validacion manual real con casos de rate limit, quota y errores clasificados del proveedor en `docs/08-validacion-manual-google-real.md`.
+
 ## Alcance de v1
 
 - Servidor MCP remoto con `Python + FastMCP`.

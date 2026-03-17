@@ -32,6 +32,9 @@ GOOGLE_CLIENT_ID=<real-client-id>
 GOOGLE_CLIENT_SECRET=<real-client-secret>
 GOOGLE_REDIRECT_URI=http://localhost:8000/oauth/google/callback
 GOOGLE_OAUTH_SCOPES=https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/tasks,https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.compose,https://www.googleapis.com/auth/gmail.modify,openid,https://www.googleapis.com/auth/userinfo.email,https://www.googleapis.com/auth/userinfo.profile
+GOOGLE_API_MAX_RETRIES=3
+GOOGLE_API_RETRY_BASE_DELAY_SECONDS=1.0
+GOOGLE_API_RETRY_MAX_DELAY_SECONDS=8.0
 JWT_TEST_MODE=true
 JWT_TEST_TOKEN=local-dev-token
 JWT_TEST_SUBJECT=manual-test-user
@@ -289,6 +292,16 @@ Borrar el evento:
   }'
 ```
 
+Anota el `operation_id` y confirma el borrado:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool calendar_confirm_delete_event \
+  --args '{
+    "operation_id": "<operation_id>"
+  }'
+```
+
 ## Paso 7: probar Tasks
 
 Listar listas actuales:
@@ -386,6 +399,16 @@ Borrar tarea:
   }'
 ```
 
+Anota el `operation_id` y confirma:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool tasks_confirm_delete_task \
+  --args '{
+    "operation_id": "<operation_id>"
+  }'
+```
+
 Borrar lista:
 
 ```bash
@@ -393,6 +416,16 @@ Borrar lista:
   --tool tasks_delete_tasklist \
   --args '{
     "tasklist_id": "<tasklist_id>"
+  }'
+```
+
+Anota el `operation_id` y confirma:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool tasks_confirm_delete_tasklist \
+  --args '{
+    "operation_id": "<operation_id>"
   }'
 ```
 
@@ -485,6 +518,16 @@ Enviar correo opcionalmente:
   }'
 ```
 
+Anota el `operation_id` y confirma el envio:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool gmail_confirm_send_email \
+  --args '{
+    "operation_id": "<operation_id>"
+  }'
+```
+
 Enviar un mensaje existente a la papelera opcionalmente:
 
 ```bash
@@ -512,16 +555,52 @@ Con `JWT_TEST_MODE=true`, el modo local no simula este claim automaticamente. Pa
 Tools sensibles iniciales:
 
 - `gmail_send_email`
+- `gmail_confirm_send_email`
 - `gmail_delete_message`
 - `calendar_delete_event`
+- `calendar_confirm_delete_event`
 - `tasks_delete_task`
+- `tasks_confirm_delete_task`
 - `tasks_delete_tasklist`
+- `tasks_confirm_delete_tasklist`
 
 ## Paso 10: validar auditoria y rate limiting
 
 - ejecuta varias llamadas repetidas a `/oauth/google/status` para comprobar `429`
 - verifica que no aparezcan secretos en logs
 - si usas Postgres o SQLite local, revisa la tabla `audit_logs`
+
+### Validar manejo de errores Google y reintentos
+
+Con la implementacion actual, el servidor diferencia mejor los errores del proveedor:
+
+- `403 rateLimitExceeded` y `429 rateLimitExceeded` deben terminar como `rate_limited`
+- `403 userRateLimitExceeded` y `403 quotaExceeded` tambien deben marcarse como errores recuperables
+- `409 duplicate` debe salir como `provider_conflict`
+- `412 conditionNotMet` debe salir como `provider_precondition_failed`
+
+Durante una prueba real, si Google responde con limite de cuota o rate limit, espera:
+
+- reintentos automaticos del cliente antes de fallar definitivamente
+- logs con intentos de retry y razon del proveedor
+- payload MCP final con `metadata.provider_reason`, `metadata.provider_status_code` y, si aplica, `metadata.retry_after_seconds`
+
+Ejemplo de chequeo manual esperado para un throttle del proveedor:
+
+```json
+{
+  "error": "rate_limited",
+  "detail": "Rate Limit Exceeded",
+  "retryable": true,
+  "category": "rate_limit",
+  "metadata": {
+    "provider": "google",
+    "provider_status_code": 403,
+    "provider_reason": "rateLimitExceeded",
+    "provider_domain": "usageLimits"
+  }
+}
+```
 
 Forzar rate limiting:
 

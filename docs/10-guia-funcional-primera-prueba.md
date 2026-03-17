@@ -246,16 +246,35 @@ Si quieres probar colores desde el inicio, puedes agregar `"colorId": "5"` dentr
 
 - [ ] Puedo listar mensajes.
 - [ ] Puedo crear un draft.
-- [ ] Opcional: puedo enviar un correo.
+- [ ] Opcional: puedo preparar y confirmar el envio de un correo.
 
 ## Paso 13: probar borrado y operaciones sensibles
 
 Haz esto solo si ya validaste lo anterior.
 
+### Calendar: borrar con confirmacion
+
+1. Ejecuta `calendar_delete_event`
+2. Copia el `operation_id`
+3. Ejecuta `calendar_confirm_delete_event` con ese `operation_id`
+
+### Tasks: borrar con confirmacion
+
+1. Ejecuta `tasks_delete_task` o `tasks_delete_tasklist`
+2. Copia el `operation_id`
+3. Ejecuta `tasks_confirm_delete_task` o `tasks_confirm_delete_tasklist`
+
+### Gmail: enviar con confirmacion
+
+1. Ejecuta `gmail_send_email`
+2. Revisa el preview devuelto
+3. Ejecuta `gmail_confirm_send_email` con el `operation_id`
+
 ### Checklist del paso 13
 
 - [ ] Ya decidi si usare aprobacion explicita.
 - [ ] No estoy trabajando sobre datos criticos.
+- [ ] Entiendo que las operaciones sensibles usan prepare/confirm.
 
 ## Paso 14: revisar auditoria y limites
 
