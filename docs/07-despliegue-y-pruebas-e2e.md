@@ -200,21 +200,24 @@ Si activas `REQUIRE_EXPLICIT_APPROVAL=true`, las tools sensibles deberan venir a
 - crear un evento con `calendar_create_event`
 - listar con `calendar_list_events`
 - editar con `calendar_update_event`
-- eliminar con `calendar_delete_event`
+- preparar borrado con `calendar_delete_event`
+- confirmar borrado con `calendar_confirm_delete_event`
 
 ### Tasks
 
 - crear lista con `tasks_create_tasklist`
 - crear tarea con `tasks_create_task`
 - completar con `tasks_complete_task`
-- borrar con `tasks_delete_task`
+- preparar borrado con `tasks_delete_task`
+- confirmar borrado con `tasks_confirm_delete_task`
 
 ### Gmail
 
 - listar mensajes con `gmail_list_messages`
 - crear draft con `gmail_create_draft`
 - actualizar draft con `gmail_update_draft`
-- enviar correo con `gmail_send_email`
+- preparar envio con `gmail_send_email`
+- confirmar envio con `gmail_confirm_send_email`
 
 ## Flujo de aprobacion recomendado
 
@@ -228,10 +231,14 @@ Para herramientas sensibles:
 Tools sensibles iniciales:
 
 - `gmail_send_email`
+- `gmail_confirm_send_email`
 - `gmail_delete_message`
 - `calendar_delete_event`
+- `calendar_confirm_delete_event`
 - `tasks_delete_task`
+- `tasks_confirm_delete_task`
 - `tasks_delete_tasklist`
+- `tasks_confirm_delete_tasklist`
 
 En v1, `gmail_delete_message` envia el mensaje a `TRASH` en lugar de hacer borrado permanente.
 

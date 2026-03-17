@@ -102,7 +102,13 @@
 
 ### `calendar_delete_event`
 
-- elimina un evento
+- prepara el borrado de un evento
+- devuelve `operation_id` y preview para confirmacion
+- no elimina inmediatamente
+
+### `calendar_confirm_delete_event`
+
+- confirma el borrado de un evento preparado
 - operacion sensible y auditada
 
 ## Tools MCP de Google Tasks
@@ -113,6 +119,7 @@
 - `tasks_create_tasklist`
 - `tasks_update_tasklist`
 - `tasks_delete_tasklist`
+- `tasks_confirm_delete_tasklist`
 
 ### Tasks
 
@@ -121,6 +128,7 @@
 - `tasks_update_task`
 - `tasks_complete_task`
 - `tasks_delete_task`
+- `tasks_confirm_delete_task`
 
 ## Tools MCP de Gmail
 
@@ -139,6 +147,7 @@
 ### Acciones de salida
 
 - `gmail_send_email`
+- `gmail_confirm_send_email`
 - `gmail_delete_message`
 
 ## Tools MCP de Google Drive
@@ -155,16 +164,32 @@
 ### Mutacion simple
 
 - `drive_create_folder`
+- `drive_create_google_doc`
+- `drive_create_google_sheet`
+- `drive_create_google_slide`
 - `drive_create_shortcut`
 - `drive_update_metadata`
 - `drive_move_file`
 
 ### Mutacion sensible con doble validacion
 
+- `calendar_delete_event`
+- `calendar_confirm_delete_event`
+- `tasks_delete_task`
+- `tasks_confirm_delete_task`
+- `tasks_delete_tasklist`
+- `tasks_confirm_delete_tasklist`
+- `gmail_send_email`
+- `gmail_confirm_send_email`
 - `drive_prepare_upload`
+- `drive_prepare_upload_markdown`
 - `drive_confirm_upload`
 - `drive_prepare_save_file`
 - `drive_confirm_save_file`
+- `drive_prepare_write_google_doc`
+- `drive_confirm_write_google_doc`
+- `drive_prepare_write_google_sheet`
+- `drive_confirm_write_google_sheet`
 - `drive_prepare_delete_file`
 - `drive_confirm_delete_file`
 - `drive_prepare_share_file`
@@ -176,7 +201,7 @@
 
 - Gmail no debe tratarse como CRUD puro sobre mensajes ya existentes.
 - En v1, la entidad editable principal es el draft.
-- El envio se trata como accion separada.
+- El envio se trata como accion separada con flujo prepare/confirm.
 - `gmail_delete_message` en v1 envia el mensaje a la papelera; no realiza borrado permanente.
 - El borrado debe auditarse de forma reforzada.
 
@@ -189,6 +214,10 @@ Las respuestas deben ser pequenas, consistentes y legibles por un agente:
 - resumen o snippet corto
 - links cuando existan
 - `next_page_token` cuando aplique
+- `resource_identity`
+- `human_summary`
+- `next_suggested_actions`
+- `safety_level`
 
 ## Campos recomendados en respuestas
 

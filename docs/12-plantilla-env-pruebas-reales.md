@@ -23,7 +23,7 @@ LOG_LEVEL=INFO
 LOG_JSON=false
 
 REQUIRE_EXPLICIT_APPROVAL=false
-APPROVAL_REQUIRED_TOOLS=gmail_send_email,gmail_delete_message,calendar_delete_event,tasks_delete_task,tasks_delete_tasklist
+APPROVAL_REQUIRED_TOOLS=gmail_send_email,gmail_confirm_send_email,gmail_delete_message,calendar_delete_event,calendar_confirm_delete_event,tasks_delete_task,tasks_confirm_delete_task,tasks_delete_tasklist,tasks_confirm_delete_tasklist
 
 MCP_SERVER_NAME=google-mcp-server
 MCP_SERVER_VERSION=0.1.0

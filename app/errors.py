@@ -16,6 +16,10 @@ class AppError(Exception):
         retryable: bool,
         category: str,
         metadata: dict[str, Any] | None = None,
+        hint: str | None = None,
+        expected_fields: list[str] | None = None,
+        example_payload: dict[str, Any] | None = None,
+        recommended_tool: str | None = None,
     ) -> None:
         super().__init__(detail)
         self.code = code
@@ -24,6 +28,10 @@ class AppError(Exception):
         self.retryable = retryable
         self.category = category
         self.metadata = metadata
+        self.hint = hint
+        self.expected_fields = expected_fields
+        self.example_payload = example_payload
+        self.recommended_tool = recommended_tool
 
     def to_dict(self) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -34,6 +42,14 @@ class AppError(Exception):
         }
         if self.metadata:
             payload["metadata"] = self.metadata
+        if self.hint:
+            payload["hint"] = self.hint
+        if self.expected_fields:
+            payload["expected_fields"] = self.expected_fields
+        if self.example_payload:
+            payload["example_payload"] = self.example_payload
+        if self.recommended_tool:
+            payload["recommended_tool"] = self.recommended_tool
         return payload
 
     def to_tool_error(self) -> ToolError:
@@ -182,13 +198,25 @@ class ConfigurationError(AppError):
 
 
 class ValidationError(AppError):
-    def __init__(self, detail: str) -> None:
+    def __init__(
+        self,
+        detail: str,
+        *,
+        hint: str | None = None,
+        expected_fields: list[str] | None = None,
+        example_payload: dict[str, Any] | None = None,
+        recommended_tool: str | None = None,
+    ) -> None:
         super().__init__(
             "validation_error",
             detail,
             status_code=400,
             retryable=False,
             category="validation",
+            hint=hint,
+            expected_fields=expected_fields,
+            example_payload=example_payload,
+            recommended_tool=recommended_tool,
         )
 
 
@@ -244,6 +272,9 @@ class DriveNativeEditNotSupportedError(AppError):
             status_code=400,
             retryable=False,
             category="validation",
+            hint="Export native Google Workspace files instead of downloading or saving inline content.",
+            example_payload={"export_mime_type": "application/pdf"},
+            recommended_tool="drive_export_file",
         )
 
 
@@ -255,6 +286,57 @@ class DriveExportNotSupportedError(AppError):
             status_code=400,
             retryable=False,
             category="validation",
+            hint="Choose an export format supported by the Google-native file type.",
+            expected_fields=["file_id", "export_mime_type"],
+            recommended_tool="drive_export_file",
+        )
+
+
+class PendingOperationNotFoundError(AppError):
+    def __init__(self, detail: str = "Pending confirmation operation was not found") -> None:
+        super().__init__(
+            "google_pending_operation_not_found",
+            detail,
+            status_code=404,
+            retryable=False,
+            category="validation",
+            hint="Prepare the operation again before trying to confirm it.",
+        )
+
+
+class PendingOperationExpiredError(AppError):
+    def __init__(self, detail: str = "Pending confirmation operation has expired") -> None:
+        super().__init__(
+            "google_pending_operation_expired",
+            detail,
+            status_code=410,
+            retryable=False,
+            category="validation",
+            hint="Prepare the operation again to get a fresh operation_id.",
+        )
+
+
+class PendingOperationConsumedError(AppError):
+    def __init__(self, detail: str = "Pending confirmation operation was already consumed") -> None:
+        super().__init__(
+            "google_pending_operation_already_consumed",
+            detail,
+            status_code=409,
+            retryable=False,
+            category="validation",
+            hint="Prepare the operation again if you need to repeat it.",
+        )
+
+
+class PendingPayloadMismatchError(AppError):
+    def __init__(self, detail: str = "Pending confirmation payload integrity check failed") -> None:
+        super().__init__(
+            "google_pending_payload_mismatch",
+            detail,
+            status_code=409,
+            retryable=False,
+            category="validation",
+            hint="Prepare the operation again because the stored confirmation payload is no longer trusted.",
         )
 
 

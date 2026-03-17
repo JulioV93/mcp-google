@@ -64,6 +64,9 @@ Reuse existing infrastructure:
 ### Simple mutation tools
 
 - `drive_create_folder`
+- `drive_create_google_doc`
+- `drive_create_google_sheet`
+- `drive_create_google_slide`
 - `drive_create_shortcut`
 - `drive_update_metadata`
 - `drive_move_file`
@@ -71,9 +74,14 @@ Reuse existing infrastructure:
 ### Sensitive two-step tools
 
 - `drive_prepare_upload`
+- `drive_prepare_upload_markdown`
 - `drive_confirm_upload`
 - `drive_prepare_save_file`
 - `drive_confirm_save_file`
+- `drive_prepare_write_google_doc`
+- `drive_confirm_write_google_doc`
+- `drive_prepare_write_google_sheet`
+- `drive_confirm_write_google_sheet`
 - `drive_prepare_delete_file`
 - `drive_confirm_delete_file`
 - `drive_prepare_share_file`

@@ -6,9 +6,17 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class CalendarEventDateTime(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    date_time: str | None = Field(default=None, alias="dateTime")
-    date: str | None = None
-    time_zone: str | None = Field(default=None, alias="timeZone")
+    date_time: str | None = Field(
+        default=None,
+        alias="dateTime",
+        description="RFC3339 date-time for timed events.",
+    )
+    date: str | None = Field(default=None, description="All-day event date in YYYY-MM-DD format.")
+    time_zone: str | None = Field(
+        default=None,
+        alias="timeZone",
+        description="IANA timezone such as America/Santiago.",
+    )
 
     @model_validator(mode="after")
     def validate_presence(self) -> "CalendarEventDateTime":
@@ -20,28 +28,41 @@ class CalendarEventDateTime(BaseModel):
 class CalendarEventReminderOverride(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    method: str = Field(pattern="^(email|popup)$")
-    minutes: int = Field(ge=0)
+    method: str = Field(pattern="^(email|popup)$", description="Reminder delivery method.")
+    minutes: int = Field(ge=0, description="Minutes before the event when the reminder should fire.")
 
 
 class CalendarEventReminders(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    use_default: bool | None = Field(default=None, alias="useDefault")
-    overrides: list[CalendarEventReminderOverride] | None = None
+    use_default: bool | None = Field(
+        default=None,
+        alias="useDefault",
+        description="Whether to use Google Calendar default reminders.",
+    )
+    overrides: list[CalendarEventReminderOverride] | None = Field(
+        default=None,
+        description="Explicit reminder overrides when not using default reminders.",
+    )
 
 
 class CalendarEventInput(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    summary: str
-    description: str | None = None
-    location: str | None = None
-    color_id: str | None = Field(default=None, alias="colorId")
+    summary: str = Field(description="Human-readable event title.")
+    description: str | None = Field(default=None, description="Optional event body or notes.")
+    location: str | None = Field(default=None, description="Optional event location.")
+    color_id: str | None = Field(default=None, alias="colorId", description="Google Calendar color ID.")
     start: CalendarEventDateTime
     end: CalendarEventDateTime
-    recurrence: list[str] | None = None
-    reminders: CalendarEventReminders | None = None
+    recurrence: list[str] | None = Field(
+        default=None,
+        description="Google Calendar RRULE values for recurring events. Use one event plus recurrence instead of creating many duplicate events.",
+    )
+    reminders: CalendarEventReminders | None = Field(
+        default=None,
+        description="Optional reminder configuration for the event.",
+    )
 
 
 class CalendarListEventsInput(BaseModel):
@@ -82,3 +103,9 @@ class CalendarDeleteEventInput(BaseModel):
 
     calendar_id: str = "primary"
     event_id: str
+
+
+class CalendarConfirmDeleteEventInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str

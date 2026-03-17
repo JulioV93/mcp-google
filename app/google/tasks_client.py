@@ -53,6 +53,16 @@ class TasksClient(GoogleApiClientBase):
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
         return self._execute(service.tasklists().patch(tasklist=tasklist_id, body={"title": title}))
 
+    def get_tasklist(
+        self,
+        *,
+        external_subject: str,
+        tasklist_id: str,
+        tenant_id: str | None = None,
+    ) -> dict[str, object]:
+        service = self._service(external_subject=external_subject, tenant_id=tenant_id)
+        return self._execute(service.tasklists().get(tasklist=tasklist_id))
+
     def delete_tasklist(
         self,
         *,
@@ -107,6 +117,17 @@ class TasksClient(GoogleApiClientBase):
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
         return self._execute(service.tasks().patch(tasklist=tasklist_id, task=task_id, body=task_body))
+
+    def get_task(
+        self,
+        *,
+        external_subject: str,
+        tasklist_id: str,
+        task_id: str,
+        tenant_id: str | None = None,
+    ) -> dict[str, object]:
+        service = self._service(external_subject=external_subject, tenant_id=tenant_id)
+        return self._execute(service.tasks().get(tasklist=tasklist_id, task=task_id))
 
     def delete_task(
         self,

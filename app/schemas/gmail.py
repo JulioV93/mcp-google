@@ -6,12 +6,12 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 class GmailRecipientMessageInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    to: list[EmailStr] = Field(min_length=1)
-    subject: str = Field(min_length=1)
-    body_text: str = Field(min_length=1)
-    cc: list[EmailStr] | None = None
-    bcc: list[EmailStr] | None = None
-    thread_id: str | None = None
+    to: list[EmailStr] = Field(min_length=1, description="Primary email recipients.")
+    subject: str = Field(min_length=1, description="Email subject line.")
+    body_text: str = Field(min_length=1, description="Plain-text email body.")
+    cc: list[EmailStr] | None = Field(default=None, description="Optional CC recipients.")
+    bcc: list[EmailStr] | None = Field(default=None, description="Optional BCC recipients.")
+    thread_id: str | None = Field(default=None, description="Optional Gmail thread ID for conversation continuity.")
 
 
 class GmailListMessagesInput(BaseModel):
@@ -25,7 +25,7 @@ class GmailListMessagesInput(BaseModel):
 class GmailGetMessageInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    message_id: str = Field(min_length=1)
+    message_id: str = Field(min_length=1, description="Gmail message ID.")
 
 
 class GmailListThreadsInput(BaseModel):
@@ -45,14 +45,14 @@ class GmailCreateDraftInput(BaseModel):
 class GmailUpdateDraftInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    draft_id: str = Field(min_length=1)
+    draft_id: str = Field(min_length=1, description="Gmail draft ID.")
     message: GmailRecipientMessageInput
 
 
 class GmailDeleteDraftInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    draft_id: str = Field(min_length=1)
+    draft_id: str = Field(min_length=1, description="Gmail draft ID.")
 
 
 class GmailSendEmailInput(BaseModel):
@@ -61,7 +61,13 @@ class GmailSendEmailInput(BaseModel):
     message: GmailRecipientMessageInput
 
 
+class GmailConfirmSendEmailInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str = Field(min_length=1, description="Prepared Gmail send operation ID.")
+
+
 class GmailDeleteMessageInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    message_id: str = Field(min_length=1)
+    message_id: str = Field(min_length=1, description="Gmail message ID to move to trash.")

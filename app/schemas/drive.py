@@ -9,41 +9,41 @@ GOOGLE_NATIVE_MIME_PREFIX = "application/vnd.google-apps."
 class DriveListFilesInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    page_size: int = Field(default=20, ge=1, le=100)
-    page_token: str | None = None
-    parent_id: str | None = None
-    include_trashed: bool = False
+    page_size: int = Field(default=20, ge=1, le=100, description="Maximum number of files to return.")
+    page_token: str | None = Field(default=None, description="Pagination token from a previous list response.")
+    parent_id: str | None = Field(default=None, description="Optional parent folder ID to scope the listing.")
+    include_trashed: bool = Field(default=False, description="Whether trashed files should be included.")
 
 
 class DriveSearchFilesInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    query: str | None = None
-    name: str | None = None
-    mime_type: str | None = None
-    parent_id: str | None = None
-    page_size: int = Field(default=20, ge=1, le=100)
-    page_token: str | None = None
-    include_trashed: bool = False
+    query: str | None = Field(default=None, description="Full-text Drive search query.")
+    name: str | None = Field(default=None, description="Partial file name to search for.")
+    mime_type: str | None = Field(default=None, description="Optional exact mime type filter.")
+    parent_id: str | None = Field(default=None, description="Optional parent folder ID filter.")
+    page_size: int = Field(default=20, ge=1, le=100, description="Maximum number of files to return.")
+    page_token: str | None = Field(default=None, description="Pagination token from a previous search response.")
+    include_trashed: bool = Field(default=False, description="Whether trashed files should be included.")
 
 
 class DriveGetFileInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    file_id: str
+    file_id: str = Field(description="Drive file ID.")
 
 
 class DriveDownloadFileInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    file_id: str
+    file_id: str = Field(description="Drive file ID for binary download.")
 
 
 class DriveExportFileInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    file_id: str
-    export_mime_type: str
+    file_id: str = Field(description="Drive file ID for a Google-native file export.")
+    export_mime_type: str = Field(description="Target mime type for export, such as application/pdf.")
 
 
 class DriveCreateFolderInput(BaseModel):
@@ -51,6 +51,38 @@ class DriveCreateFolderInput(BaseModel):
 
     name: str = Field(min_length=1, max_length=255)
     parent_id: str | None = None
+
+
+class DriveCreateNativeFileInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=255)
+    parent_id: str | None = None
+
+
+class DrivePrepareWriteGoogleDocInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file_id: str = Field(description="Drive file ID for a native Google Doc.")
+    content_text: str = Field(min_length=1, description="Text content to write into the document.")
+    mode: str = Field(default="replace", pattern="^(replace|append)$")
+
+
+class DrivePrepareWriteGoogleSheetInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file_id: str = Field(description="Drive file ID for a native Google Sheet.")
+    values: list[list[str | int | float | bool | None]] = Field(
+        min_length=1,
+        description="Tabular values to write into the spreadsheet.",
+    )
+    sheet_name: str | None = Field(default=None, description="Optional sheet/tab name.")
+    create_sheet_if_missing: bool = Field(
+        default=False,
+        description="Whether to create the sheet/tab when `sheet_name` does not already exist.",
+    )
+    start_cell: str = Field(default="A1", description="Start cell in A1 notation for overwrite mode.")
+    mode: str = Field(default="overwrite", pattern="^(overwrite|append)$")
 
 
 class DriveCreateShortcutInput(BaseModel):
@@ -92,9 +124,9 @@ class DriveMoveFileInput(BaseModel):
 class DriveInlineContentInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    content_text: str | None = None
-    content_base64: str | None = None
-    mime_type: str
+    content_text: str | None = Field(default=None, description="Inline text content for UTF-8 files.")
+    content_base64: str | None = Field(default=None, description="Base64 content for binary payloads.")
+    mime_type: str = Field(description="Mime type for the uploaded or saved content.")
 
     @model_validator(mode="after")
     def validate_content(self) -> "DriveInlineContentInput":
@@ -114,7 +146,7 @@ class DrivePrepareUploadInput(BaseModel):
 class DrivePrepareSaveFileInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    file_id: str
+    file_id: str = Field(description="Drive file ID.")
     content: DriveInlineContentInput
 
 
@@ -122,7 +154,7 @@ class DrivePrepareDeleteFileInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     file_id: str
-    permanent: bool = False
+    permanent: bool = Field(default=False, description="Whether to permanently delete instead of moving to trash.")
 
 
 class DrivePermissionInput(BaseModel):

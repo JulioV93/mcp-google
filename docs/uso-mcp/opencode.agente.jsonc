@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "agent": {
+    "calendar": {
+      "description": "Especialista en Google Calendar",
+      "mode": "subagent",
+      "prompt": "{file:./prompts/calendar-agent.txt}"
+    }
+  }
+}

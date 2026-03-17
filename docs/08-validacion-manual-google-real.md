@@ -292,6 +292,16 @@ Borrar el evento:
   }'
 ```
 
+Anota el `operation_id` y confirma el borrado:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool calendar_confirm_delete_event \
+  --args '{
+    "operation_id": "<operation_id>"
+  }'
+```
+
 ## Paso 7: probar Tasks
 
 Listar listas actuales:
@@ -389,6 +399,16 @@ Borrar tarea:
   }'
 ```
 
+Anota el `operation_id` y confirma:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool tasks_confirm_delete_task \
+  --args '{
+    "operation_id": "<operation_id>"
+  }'
+```
+
 Borrar lista:
 
 ```bash
@@ -396,6 +416,16 @@ Borrar lista:
   --tool tasks_delete_tasklist \
   --args '{
     "tasklist_id": "<tasklist_id>"
+  }'
+```
+
+Anota el `operation_id` y confirma:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool tasks_confirm_delete_tasklist \
+  --args '{
+    "operation_id": "<operation_id>"
   }'
 ```
 
@@ -488,6 +518,16 @@ Enviar correo opcionalmente:
   }'
 ```
 
+Anota el `operation_id` y confirma el envio:
+
+```bash
+.venv/bin/python scripts/mcp_smoke_test.py \
+  --tool gmail_confirm_send_email \
+  --args '{
+    "operation_id": "<operation_id>"
+  }'
+```
+
 Enviar un mensaje existente a la papelera opcionalmente:
 
 ```bash
@@ -515,10 +555,14 @@ Con `JWT_TEST_MODE=true`, el modo local no simula este claim automaticamente. Pa
 Tools sensibles iniciales:
 
 - `gmail_send_email`
+- `gmail_confirm_send_email`
 - `gmail_delete_message`
 - `calendar_delete_event`
+- `calendar_confirm_delete_event`
 - `tasks_delete_task`
+- `tasks_confirm_delete_task`
 - `tasks_delete_tasklist`
+- `tasks_confirm_delete_tasklist`
 
 ## Paso 10: validar auditoria y rate limiting
 
