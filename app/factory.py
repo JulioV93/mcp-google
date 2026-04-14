@@ -277,6 +277,8 @@ def create_app() -> Starlette:
                 "scopes": result.scopes,
                 "status": result.status,
                 "missing_scopes": result.missing_scopes,
+                "status_detail": result.status_detail,
+                "recommended_action": result.recommended_action,
             }
         )
 

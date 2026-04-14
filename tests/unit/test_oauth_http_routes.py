@@ -22,7 +22,15 @@ def test_oauth_status_uses_authenticated_subject() -> None:
     app = create_app()
     with patch(
         "app.factory.AuthService.get_google_status",
-        return_value=AuthStatusResult(False, None, [], None, ["https://www.googleapis.com/auth/drive"]),
+        return_value=AuthStatusResult(
+            False,
+            None,
+            [],
+            None,
+            ["https://www.googleapis.com/auth/drive"],
+            "Google account is not connected",
+            "Run auth_google_begin to connect a Google account.",
+        ),
     ):
         with TestClient(app) as client:
             response = client.get(
@@ -35,6 +43,8 @@ def test_oauth_status_uses_authenticated_subject() -> None:
     assert payload["connected"] is False
     assert payload["google_email"] is None
     assert payload["missing_scopes"] == ["https://www.googleapis.com/auth/drive"]
+    assert payload["status_detail"] == "Google account is not connected"
+    assert payload["recommended_action"] == "Run auth_google_begin to connect a Google account."
 
 
 def test_oauth_start_returns_typed_app_error_payload() -> None:
