@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
+from google.auth.exceptions import RefreshError as GoogleRefreshError
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2 import id_token
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db.models import GoogleConnection, User
-from app.errors import AuthenticationProviderError, ConfigurationError, ValidationError
+from app.errors import AuthenticationProviderError, ConfigurationError, ProviderError, ValidationError
 from app.oauth.google_oauth import GoogleOAuthTokens, build_authorization_url, build_user_credentials, exchange_code
 from app.oauth.state_store import OAuthStateStore
 from app.security.encryption import decrypt_text, encrypt_text
@@ -31,6 +32,8 @@ class AuthStatusResult:
     scopes: list[str]
     status: str | None
     missing_scopes: list[str]
+    status_detail: str | None
+    recommended_action: str | None
 
 
 class AuthService:
@@ -98,15 +101,20 @@ class AuthService:
                 scopes=[],
                 status=None,
                 missing_scopes=list(self.settings.google_oauth_scope_list),
+                status_detail="Google account is not connected",
+                recommended_action="Run auth_google_begin to connect a Google account.",
             )
         granted_scopes = list(connection.granted_scopes or [])
         missing_scopes = [scope for scope in self.settings.google_oauth_scope_list if scope not in granted_scopes]
+        status_detail, recommended_action = _describe_connection_status(connection.status)
         return AuthStatusResult(
             connected=connection.status == "active",
             google_email=connection.google_email,
             scopes=granted_scopes,
             status=connection.status,
             missing_scopes=missing_scopes,
+            status_detail=status_detail,
+            recommended_action=recommended_action,
         )
 
     def disconnect_google(self, *, external_subject: str, tenant_id: str | None = None) -> bool:
@@ -124,6 +132,14 @@ class AuthService:
         connection = self.connections.get_google_connection(user=user)
         if connection is None:
             raise AuthenticationProviderError("Google connection is missing")
+        if connection.status != "active":
+            raise AuthenticationProviderError(
+                "Google authorization requires reconnection",
+                metadata={
+                    "provider": "google",
+                    "connection_status": connection.status,
+                },
+            )
 
         access_token = decrypt_text(connection.access_token_encrypted, self.settings)
         refresh_token = (
@@ -138,15 +154,39 @@ class AuthService:
             settings=self.settings,
         )
         if connection.expires_at is not None:
-            credentials.expiry = connection.expires_at
+            credentials.expiry = _google_auth_compatible_expiry(connection.expires_at)
         if credentials.expired and credentials.refresh_token:
-            credentials.refresh(GoogleAuthRequest())
+            try:
+                credentials.refresh(GoogleAuthRequest())
+            except GoogleRefreshError as exc:
+                refresh_error = _classify_google_refresh_error(exc)
+                if refresh_error["error"] == "invalid_grant":
+                    self._mark_connection_reauth_required(connection)
+                    raise AuthenticationProviderError(
+                        "Google authorization expired or was revoked; reconnect Google auth and retry",
+                        metadata={
+                            "provider": "google",
+                            "connection_status": connection.status,
+                            **refresh_error,
+                        },
+                    ) from exc
+                raise ProviderError(
+                    "Unable to refresh Google credentials",
+                    metadata={
+                        "provider": "google",
+                        **refresh_error,
+                    },
+                ) from exc
             connection.access_token_encrypted = encrypt_text(credentials.token, self.settings)
             if credentials.refresh_token:
                 connection.refresh_token_encrypted = encrypt_text(credentials.refresh_token, self.settings)
             connection.expires_at = credentials.expiry
             self.session.commit()
         return credentials
+
+    def _mark_connection_reauth_required(self, connection: GoogleConnection) -> None:
+        connection.status = "reauth_required"
+        self.session.commit()
 
     def _upsert_google_connection(
         self,
@@ -213,3 +253,40 @@ def _parse_expiry(expiry_iso: str | None) -> datetime | None:
     if not expiry_iso:
         return None
     return datetime.fromisoformat(expiry_iso)
+
+
+def _google_auth_compatible_expiry(expiry: datetime) -> datetime:
+    if expiry.tzinfo is None:
+        return expiry
+    return expiry.astimezone(UTC).replace(tzinfo=None)
+
+
+def _classify_google_refresh_error(exc: GoogleRefreshError) -> dict[str, str]:
+    metadata: dict[str, str] = {}
+    if len(exc.args) > 1 and isinstance(exc.args[1], dict):
+        error_payload = exc.args[1]
+        error = error_payload.get("error")
+        if isinstance(error, str) and error:
+            metadata["error"] = error
+        error_description = error_payload.get("error_description")
+        if isinstance(error_description, str) and error_description:
+            metadata["error_description"] = error_description
+    if "error" not in metadata:
+        metadata["error"] = "refresh_failed"
+    return metadata
+
+
+def _describe_connection_status(status: str | None) -> tuple[str | None, str | None]:
+    if status == "active":
+        return "Google account is connected and ready.", None
+    if status == "reauth_required":
+        return (
+            "Google authorization expired or was revoked; reconnection is required.",
+            "Run auth_google_begin to reconnect Google auth, then retry the request.",
+        )
+    if status:
+        return (
+            f"Google connection status is '{status}'.",
+            "Check the Google connection and reconnect if needed.",
+        )
+    return "Google account is not connected", "Run auth_google_begin to connect a Google account."

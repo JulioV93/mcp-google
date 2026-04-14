@@ -17,6 +17,9 @@ class AuthGoogleStatusResponse(BaseModel):
     google_email: str | None
     scopes: list[str]
     status: str | None
+    missing_scopes: list[str]
+    status_detail: str | None
+    recommended_action: str | None
 
 
 class AuthGoogleDisconnectResponse(BaseModel):
