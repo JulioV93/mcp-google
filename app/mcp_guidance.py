@@ -176,6 +176,9 @@ def drive_guide() -> str:
 Primary read tools:
 - drive_list_files
 - drive_search_files
+- drive_find_folder_by_name
+- drive_find_file_by_name
+- drive_search_files_advanced
 - drive_get_file
 - drive_list_permissions
 - drive_download_file
@@ -200,6 +203,9 @@ Primary mutation tools:
 
 Decision rules:
 - search before mutate when file identity is uncertain
+- prefer `drive_find_folder_by_name` or `drive_find_file_by_name` when the user gives a natural-language name but not a file ID
+- use `file_type` values like `folder`, `doc`, `sheet`, or `pdf` instead of forcing small agents to remember Drive mime types
+- smart find tools return `status`, `best_match`, `matches_count`, `match_type`, and `score` so agents can decide whether to proceed or clarify
 - create native Docs, Sheets, and Slides with the dedicated drive_create_google_* tools
 - write text into native Docs with drive_prepare_write_google_doc then drive_confirm_write_google_doc
 - write tabular values into native Sheets with drive_prepare_write_google_sheet then drive_confirm_write_google_sheet
@@ -350,6 +356,61 @@ Search before mutation:
 {
   "name": "roadmap",
   "mime_type": "application/pdf"
+}
+
+Find a folder by name:
+{
+  "name": "Sistema de Notas de Proyectos",
+  "exact": true,
+  "normalized": true,
+  "include_trashed": false,
+  "max_results": 10
+}
+
+Find a file by name and high-level type:
+{
+  "name": "Plan 2026",
+  "file_type": "doc",
+  "exact": false,
+  "normalized": true,
+  "include_trashed": false,
+  "max_results": 20
+}
+
+Advanced Drive search:
+{
+  "terms": ["Sistema", "Notas", "Proyectos"],
+  "mime_types": ["application/vnd.google-apps.folder"],
+  "match_mode": "all_terms",
+  "normalized": true,
+  "fuzzy": true,
+  "include_trashed": false,
+  "page_size": 20
+}
+
+Export a Google Doc as PDF:
+{
+  "file_id": "file-123",
+  "export_mime_type": "application/pdf"
+}
+
+Prepare writing a Google Doc:
+{
+  "file_id": "file-123",
+  "content_text": "Resumen semanal\n- foco\n- metricas",
+  "mode": "replace"
+}
+
+Prepare writing a Google Sheet:
+{
+  "file_id": "file-123",
+  "sheet_name": "Resumen",
+  "create_sheet_if_missing": true,
+  "start_cell": "A1",
+  "values": [
+    ["Fecha", "PnL"],
+    ["2026-03-20", 125.5]
+  ]
 }
 
 Prepare share:

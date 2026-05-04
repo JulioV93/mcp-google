@@ -9,6 +9,8 @@ from app.schemas.drive import (
     DriveCreateShortcutInput,
     DriveDownloadFileInput,
     DriveExportFileInput,
+    DriveFindFileByNameInput,
+    DriveFindFolderByNameInput,
     DriveGetFileInput,
     DriveListFilesInput,
     DriveListPermissionsInput,
@@ -21,6 +23,7 @@ from app.schemas.drive import (
     DrivePrepareWriteGoogleSheetInput,
     DrivePrepareUploadInput,
     DriveSearchFilesInput,
+    DriveSearchFilesAdvancedInput,
     DriveUpdateMetadataInput,
 )
 from app.services.drive_service import DriveService
@@ -106,6 +109,148 @@ def register_drive_tools(mcp: FastMCP) -> None:
             resource_type="drive_file",
             arguments=payload.model_dump(exclude_none=True),
             operation=lambda session, context: DriveService(session).get_file(
+                external_subject=context.subject,
+                tenant_id=context.tenant_id,
+                input_data=payload,
+            ),
+        )
+
+    @mcp.tool
+    def drive_find_folder_by_name(
+        name: str,
+        exact: bool = True,
+        normalized: bool = True,
+        include_trashed: bool = False,
+        parent_id: str | None = None,
+        max_results: int = 10,
+    ) -> dict[str, object]:
+        """Find a Drive folder by name using MCP-side ranking and fallback strategies.
+
+        Use this when the user names a folder but you do not know its `file_id` yet.
+        The MCP automatically tries exact, normalized, partial, tokenized, and light fuzzy matching.
+
+        Example payload:
+        ```json
+        {
+          "name": "Sistema de Notas de Proyectos",
+          "exact": true,
+          "normalized": true,
+          "include_trashed": false,
+          "max_results": 10
+        }
+        ```
+        """
+        payload = DriveFindFolderByNameInput(
+            name=name,
+            exact=exact,
+            normalized=normalized,
+            include_trashed=include_trashed,
+            parent_id=parent_id,
+            max_results=max_results,
+        )
+        return run_tool(
+            tool_name="drive_find_folder_by_name",
+            provider="google",
+            resource_type="drive_file",
+            arguments=payload.model_dump(exclude_none=True),
+            operation=lambda session, context: DriveService(session).find_folder_by_name(
+                external_subject=context.subject,
+                tenant_id=context.tenant_id,
+                input_data=payload,
+            ),
+        )
+
+    @mcp.tool
+    def drive_find_file_by_name(
+        name: str,
+        file_type: str = "any",
+        exact: bool = False,
+        normalized: bool = True,
+        include_trashed: bool = False,
+        parent_id: str | None = None,
+        max_results: int = 20,
+    ) -> dict[str, object]:
+        """Find a Drive file by name using MCP-side ranking and high-level file type filters.
+
+        Use `file_type` like `folder`, `doc`, `sheet`, or `pdf` instead of raw Drive mime types.
+
+        Example payload:
+        ```json
+        {
+          "name": "Plan 2026",
+          "file_type": "doc",
+          "exact": false,
+          "normalized": true,
+          "include_trashed": false,
+          "max_results": 20
+        }
+        ```
+        """
+        payload = DriveFindFileByNameInput(
+            name=name,
+            file_type=file_type,
+            exact=exact,
+            normalized=normalized,
+            include_trashed=include_trashed,
+            parent_id=parent_id,
+            max_results=max_results,
+        )
+        return run_tool(
+            tool_name="drive_find_file_by_name",
+            provider="google",
+            resource_type="drive_file",
+            arguments=payload.model_dump(exclude_none=True),
+            operation=lambda session, context: DriveService(session).find_file_by_name(
+                external_subject=context.subject,
+                tenant_id=context.tenant_id,
+                input_data=payload,
+            ),
+        )
+
+    @mcp.tool
+    def drive_search_files_advanced(
+        terms: list[str],
+        mime_types: list[str] | None = None,
+        match_mode: str = "all_terms",
+        normalized: bool = True,
+        fuzzy: bool = True,
+        include_trashed: bool = False,
+        parent_id: str | None = None,
+        page_size: int = 20,
+    ) -> dict[str, object]:
+        """Search Drive files with MCP-side multi-step strategies for smaller models and agents.
+
+        Use this for more complex searches when a single name is not enough.
+
+        Example payload:
+        ```json
+        {
+          "terms": ["Sistema", "Notas", "Proyectos"],
+          "mime_types": ["application/vnd.google-apps.folder"],
+          "match_mode": "all_terms",
+          "normalized": true,
+          "fuzzy": true,
+          "include_trashed": false,
+          "page_size": 20
+        }
+        ```
+        """
+        payload = DriveSearchFilesAdvancedInput(
+            terms=terms,
+            mime_types=mime_types,
+            match_mode=match_mode,
+            normalized=normalized,
+            fuzzy=fuzzy,
+            include_trashed=include_trashed,
+            parent_id=parent_id,
+            page_size=page_size,
+        )
+        return run_tool(
+            tool_name="drive_search_files_advanced",
+            provider="google",
+            resource_type="drive_file",
+            arguments=payload.model_dump(exclude_none=True),
+            operation=lambda session, context: DriveService(session).search_files_advanced(
                 external_subject=context.subject,
                 tenant_id=context.tenant_id,
                 input_data=payload,
