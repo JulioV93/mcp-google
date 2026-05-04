@@ -71,6 +71,15 @@ def register_drive_tools(mcp: FastMCP) -> None:
 
         Use before move, share, save, or delete when the file identity is uncertain.
         Prefer this over mutation tools when you do not yet know `file_id`.
+
+        Example payload:
+        ```json
+        {
+          "name": "roadmap",
+          "mime_type": "application/pdf",
+          "page_size": 10
+        }
+        ```
         """
         payload = DriveSearchFilesInput(
             query=query,
@@ -156,6 +165,14 @@ def register_drive_tools(mcp: FastMCP) -> None:
         """Export a native Google Workspace file to a supported format.
 
         Use this for Google Docs, Sheets, and Slides when you need file contents.
+
+        Example payload:
+        ```json
+        {
+          "file_id": "file-123",
+          "export_mime_type": "application/pdf"
+        }
+        ```
         """
         payload = DriveExportFileInput(file_id=file_id, export_mime_type=export_mime_type)
         return run_tool(
@@ -317,6 +334,17 @@ def register_drive_tools(mcp: FastMCP) -> None:
         """Prepare a sensitive Drive upload operation.
 
         This does not upload yet. It creates a preview and operation_id for later confirmation.
+
+        Example payload:
+        ```json
+        {
+          "name": "notes.md",
+          "content": {
+            "content_text": "# Resumen\n\nPuntos clave.",
+            "mime_type": "text/markdown"
+          }
+        }
+        ```
         """
         payload = DrivePrepareUploadInput.model_validate({"name": name, "parent_id": parent_id, "content": content})
         return run_tool(
@@ -336,6 +364,13 @@ def register_drive_tools(mcp: FastMCP) -> None:
         """Confirm a prepared Drive upload operation.
 
         Use only after reviewing a prior `drive_prepare_upload` preview.
+
+        Example payload:
+        ```json
+        {
+          "operation_id": "op-123"
+        }
+        ```
         """
         payload = DriveConfirmOperationInput(operation_id=operation_id)
         return run_tool(
@@ -374,6 +409,15 @@ def register_drive_tools(mcp: FastMCP) -> None:
         """Prepare writing text content into a native Google Doc.
 
         Use this instead of binary save when the target file is a Google Docs document.
+
+        Example payload:
+        ```json
+        {
+          "file_id": "file-123",
+          "content_text": "Resumen semanal\n- foco\n- metricas",
+          "mode": "replace"
+        }
+        ```
         """
         payload = DrivePrepareWriteGoogleDocInput(file_id=file_id, content_text=content_text, mode=mode)
         return run_tool(
@@ -416,6 +460,20 @@ def register_drive_tools(mcp: FastMCP) -> None:
         """Prepare writing tabular data into a native Google Sheet.
 
         Use this for structured rows and columns instead of binary save.
+
+        Example payload:
+        ```json
+        {
+          "file_id": "file-123",
+          "sheet_name": "Resumen",
+          "create_sheet_if_missing": true,
+          "start_cell": "A1",
+          "values": [
+            ["Fecha", "PnL"],
+            ["2026-03-20", 125.5]
+          ]
+        }
+        ```
         """
         payload = DrivePrepareWriteGoogleSheetInput(
             file_id=file_id,

@@ -27,6 +27,14 @@ def register_gmail_tools(mcp: FastMCP) -> None:
         """List Gmail messages for the current user.
 
         Use to search for candidate message IDs before reading or mutating a specific message.
+
+        Example payload:
+        ```json
+        {
+          "query": "from:person@example.com newer_than:7d",
+          "max_results": 10
+        }
+        ```
         """
         payload = GmailListMessagesInput(query=query, max_results=max_results, page_token=page_token)
         return run_tool(
@@ -89,6 +97,17 @@ def register_gmail_tools(mcp: FastMCP) -> None:
 
         Use when the user wants to review, edit, or approve the email before it is sent.
         Prefer this when send intent is ambiguous.
+
+        Example payload:
+        ```json
+        {
+          "message": {
+            "to": ["person@example.com"],
+            "subject": "Seguimiento",
+            "body_text": "Te comparto el resumen del dia."
+          }
+        }
+        ```
         """
         payload = GmailCreateDraftInput.model_validate({"message": message or {}})
         return run_tool(
@@ -148,6 +167,17 @@ def register_gmail_tools(mcp: FastMCP) -> None:
         This does not send immediately. It creates a preview and `operation_id`.
         Use `gmail_confirm_send_email` after review to execute delivery.
         If the user wants a draft instead, prefer `gmail_create_draft`.
+
+        Example payload:
+        ```json
+        {
+          "message": {
+            "to": ["person@example.com"],
+            "subject": "Confirmacion",
+            "body_text": "Queda confirmado para manana."
+          }
+        }
+        ```
         """
         payload = GmailSendEmailInput.model_validate({"message": message or {}})
         return run_tool(
@@ -187,6 +217,13 @@ def register_gmail_tools(mcp: FastMCP) -> None:
 
         This is a mutation. It moves the message to trash and is not a permanent delete tool.
         Locate the message ID first with `gmail_list_messages` or `gmail_list_threads`.
+
+        Example payload:
+        ```json
+        {
+          "message_id": "msg-123"
+        }
+        ```
         """
         payload = GmailDeleteMessageInput(message_id=message_id)
         return run_tool(
