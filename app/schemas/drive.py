@@ -27,6 +27,61 @@ class DriveSearchFilesInput(BaseModel):
     include_trashed: bool = Field(default=False, description="Whether trashed files should be included.")
 
 
+class DriveFindByNameInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, description="Target Drive file or folder name.")
+    exact: bool = Field(default=False, description="Whether to prioritize exact name matches first.")
+    normalized: bool = Field(
+        default=True,
+        description="Whether to compare normalized names locally using lowercase, trimmed, accent-free text.",
+    )
+    include_trashed: bool = Field(default=False, description="Whether trashed files should be included.")
+    parent_id: str | None = Field(default=None, description="Optional parent folder ID filter.")
+    max_results: int = Field(default=20, ge=1, le=100, description="Maximum number of ranked matches to return.")
+
+
+class DriveFindFolderByNameInput(DriveFindByNameInput):
+    exact: bool = Field(default=True, description="Whether to prioritize exact folder name matches first.")
+    max_results: int = Field(default=10, ge=1, le=100, description="Maximum number of ranked matches to return.")
+
+
+class DriveFindFileByNameInput(DriveFindByNameInput):
+    file_type: str = Field(
+        default="any",
+        pattern="^(doc|sheet|pdf|folder|any)$",
+        description="High-level file type filter mapped internally to Drive mime types.",
+    )
+
+
+class DriveSearchFilesAdvancedInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    terms: list[str] = Field(min_length=1, description="Search terms used to build automatic Drive search strategies.")
+    mime_types: list[str] | None = Field(default=None, description="Optional Drive mime type filters.")
+    match_mode: str = Field(
+        default="all_terms",
+        pattern="^(all_terms|any_term)$",
+        description="Whether all terms or any term should be treated as required when ranking results.",
+    )
+    normalized: bool = Field(
+        default=True,
+        description="Whether to compare normalized names locally using lowercase, trimmed, accent-free text.",
+    )
+    fuzzy: bool = Field(default=True, description="Whether to use lightweight local fuzzy ranking on candidate names.")
+    include_trashed: bool = Field(default=False, description="Whether trashed files should be included.")
+    parent_id: str | None = Field(default=None, description="Optional parent folder ID filter.")
+    page_size: int = Field(default=20, ge=1, le=100, description="Maximum number of ranked matches to return.")
+
+    @model_validator(mode="after")
+    def validate_terms(self) -> "DriveSearchFilesAdvancedInput":
+        cleaned_terms = [term.strip() for term in self.terms if term.strip()]
+        if not cleaned_terms:
+            raise ValueError("At least one non-empty search term is required")
+        self.terms = cleaned_terms
+        return self
+
+
 class DriveGetFileInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
