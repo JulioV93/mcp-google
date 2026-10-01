@@ -46,6 +46,16 @@ def register_calendar_tools(mcp: FastMCP) -> None:
 
         Use this to search by time range or query before calling get, update, or delete.
         Prefer this over `calendar_get_event` when you do not yet know the event ID.
+
+        Example payload:
+        ```json
+        {
+          "calendar_id": "primary",
+          "time_min": "2026-03-20T00:00:00Z",
+          "time_max": "2026-03-21T00:00:00Z",
+          "max_results": 10
+        }
+        ```
         """
         payload = CalendarListEventsInput(
             calendar_id=calendar_id,
@@ -98,6 +108,19 @@ def register_calendar_tools(mcp: FastMCP) -> None:
         Example recurrence values:
         - daily: ["RRULE:FREQ=DAILY"]
         - weekdays: ["RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"]
+
+        Example payload:
+        ```json
+        {
+          "calendar_id": "primary",
+          "event": {
+            "summary": "1:1 semanal",
+            "start": {"dateTime": "2026-03-20T15:00:00-03:00"},
+            "end": {"dateTime": "2026-03-20T15:30:00-03:00"},
+            "recurrence": ["RRULE:FREQ=WEEKLY;BYDAY=FR"]
+          }
+        }
+        ```
         """
         payload = CalendarCreateEventInput.model_validate({"calendar_id": calendar_id, "event": event or {}})
         return run_tool(
@@ -122,6 +145,19 @@ def register_calendar_tools(mcp: FastMCP) -> None:
 
         Use when the user wants to change an existing event and the `event_id` is known.
         If you need to locate the event first, use `calendar_list_events` before updating.
+
+        Example payload:
+        ```json
+        {
+          "calendar_id": "primary",
+          "event_id": "evt-123",
+          "event": {
+            "summary": "1:1 reprogramada",
+            "start": {"dateTime": "2026-03-20T16:00:00-03:00"},
+            "end": {"dateTime": "2026-03-20T16:30:00-03:00"}
+          }
+        }
+        ```
         """
         payload = CalendarUpdateEventInput.model_validate(
             {"calendar_id": calendar_id, "event_id": event_id, "event": event or {}}
@@ -144,6 +180,14 @@ def register_calendar_tools(mcp: FastMCP) -> None:
 
         This does not delete immediately. It returns an operation preview and `operation_id`.
         Use `calendar_confirm_delete_event` after review to execute the deletion.
+
+        Example payload:
+        ```json
+        {
+          "calendar_id": "primary",
+          "event_id": "evt-123"
+        }
+        ```
         """
         payload = CalendarDeleteEventInput(calendar_id=calendar_id, event_id=event_id)
         return run_tool(

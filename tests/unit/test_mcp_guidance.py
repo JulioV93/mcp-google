@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import inspect
+
 from app import mcp_guidance
+from app.tools import calendar_tools, drive_tools, gmail_tools, tasks_tools
 
 
 def test_overview_guide_mentions_all_supported_domains() -> None:
@@ -38,3 +41,12 @@ def test_confirm_example_resources_include_operation_ids() -> None:
     assert "tasks_delete_task" in mcp_guidance.tasks_confirm_examples()
     assert "gmail_send_email" in mcp_guidance.gmail_confirm_examples()
     assert "drive_prepare_upload" in mcp_guidance.drive_confirm_examples()
+
+
+def test_key_tool_docstrings_include_example_payloads() -> None:
+    assert "Example payload:" in inspect.getsource(calendar_tools)
+    assert "Example payload:" in inspect.getsource(tasks_tools)
+    assert "Example payload:" in inspect.getsource(gmail_tools)
+    assert "Example payload:" in inspect.getsource(drive_tools)
+
+    assert '"tasklist_id": "abc"' in inspect.getsource(tasks_tools)
