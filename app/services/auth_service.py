@@ -73,7 +73,7 @@ class AuthService:
     ) -> GoogleConnection:
         self._validate_google_oauth_settings()
         state_record = self.state_store.get_valid(state)
-        if state_record is None:
+        if state_record is None or state_record.provider != "google":
             raise ValidationError("OAuth state is invalid or expired")
 
         tokens = exchange_code(
@@ -89,6 +89,13 @@ class AuthService:
         self.state_store.delete(state_record)
         self.session.commit()
         return connection
+
+    def cancel_google_auth(self, *, state: str) -> None:
+        state_record = self.state_store.get_valid(state)
+        if state_record is None or state_record.provider != "google":
+            raise ValidationError("OAuth state is invalid or expired")
+        self.state_store.delete(state_record)
+        self.session.commit()
 
     def get_google_status(self, *, external_subject: str, tenant_id: str | None = None) -> AuthStatusResult:
         user = self.connections.get_or_create_user(external_subject=external_subject, tenant_id=tenant_id)

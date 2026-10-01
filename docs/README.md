@@ -16,6 +16,13 @@ Este directorio separa la planificacion acordada para el servidor MCP multiusuar
 - `docs/10-guia-funcional-primera-prueba.md`: flujo paso a paso para realizar la primera validacion funcional completa.
 - `docs/11-guia-tecnica-de-pruebas.md`: herramientas recomendadas y estrategia tecnica por capa de prueba.
 - `docs/12-plantilla-env-pruebas-reales.md`: referencia para construir un `.env` realista para pruebas manuales.
+- `docs/17-guia-ejecutar-servidor-en-otro-equipo-con-docker-hub.md`: manual operativo para publicar la imagen y ejecutar el servidor en otro equipo sin copiar el codigo fuente.
+- `docs/18-guia-modificar-codigo-en-otro-servidor-y-reconstruir-imagen.md`: manual para trabajar con el repositorio en otro servidor, editar codigo y reconstruir la imagen Docker.
+- `docs/19-guia-montar-codigo-como-volumen-para-desarrollo.md`: explicacion detallada del uso de volumenes para desarrollo rapido con Docker.
+- `docker-compose.prod.yml`: compose orientado a produccion para desplegar desde una imagen publicada en Docker Hub.
+- `deploy/README.md`: guia corta de operacion para la carpeta remota de despliegue.
+
+- `docs/20-guia-cloudflare-tunnel-para-varios-proyectos.md`: reutilizar el túnel existente sin duplicar servicios.
 
 ## Cambios recientes relevantes
 

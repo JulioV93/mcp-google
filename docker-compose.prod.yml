@@ -1,0 +1,31 @@
+services:
+  google-mcp:
+    platform: linux/amd64
+    image: ${MCP_GOOGLE_IMAGE:?Define MCP_GOOGLE_IMAGE with the published image digest}
+    restart: unless-stopped
+    user: "1000:1000"
+    env_file:
+      - .env
+    environment:
+      HOME: /tmp
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/app/data
+    mem_limit: 512m
+    cpus: 0.5
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
