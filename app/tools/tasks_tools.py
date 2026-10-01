@@ -124,6 +124,15 @@ def register_tasks_tools(mcp: FastMCP) -> None:
         """List Google tasks from a task list.
 
         Use before update, complete, or delete when you need to locate a task ID.
+
+        Example payload:
+        ```json
+        {
+          "tasklist_id": "abc",
+          "max_results": 20,
+          "show_completed": false
+        }
+        ```
         """
         payload = TasksListTasksInput(
             tasklist_id=tasklist_id,
@@ -149,6 +158,17 @@ def register_tasks_tools(mcp: FastMCP) -> None:
         """Create a Google task.
 
         Use for new tasks with title, notes, or due date.
+
+        Example payload:
+        ```json
+        {
+          "tasklist_id": "abc",
+          "task": {
+            "title": "Mi tarea",
+            "due": "2026-04-30T00:00:00.000Z"
+          }
+        }
+        ```
         """
         payload = TasksCreateTaskInput.model_validate({"tasklist_id": tasklist_id, "task": task or {}})
         return run_tool(
@@ -169,6 +189,18 @@ def register_tasks_tools(mcp: FastMCP) -> None:
 
         Use for changing task title, notes, or due date.
         If the user wants to mark a task done, prefer `tasks_complete_task`.
+
+        Example payload:
+        ```json
+        {
+          "tasklist_id": "abc",
+          "task_id": "task-123",
+          "task": {
+            "title": "Mi tarea actualizada",
+            "due": "2026-05-02T18:00:00.000Z"
+          }
+        }
+        ```
         """
         payload = TasksUpdateTaskInput.model_validate(
             {"tasklist_id": tasklist_id, "task_id": task_id, "task": task or {}}
@@ -190,6 +222,14 @@ def register_tasks_tools(mcp: FastMCP) -> None:
         """Mark a Google task as completed.
 
         Prefer this over `tasks_update_task` when the user intent is to finish or close a task.
+
+        Example payload:
+        ```json
+        {
+          "tasklist_id": "abc",
+          "task_id": "task-123"
+        }
+        ```
         """
         payload = TasksCompleteTaskInput(tasklist_id=tasklist_id, task_id=task_id, completed=completed)
         return run_tool(
@@ -210,6 +250,14 @@ def register_tasks_tools(mcp: FastMCP) -> None:
 
         This does not delete immediately. It returns an operation preview and `operation_id`.
         Use `tasks_confirm_delete_task` after review to execute the deletion.
+
+        Example payload:
+        ```json
+        {
+          "tasklist_id": "abc",
+          "task_id": "task-123"
+        }
+        ```
         """
         payload = TasksDeleteTaskInput(tasklist_id=tasklist_id, task_id=task_id)
         return run_tool(

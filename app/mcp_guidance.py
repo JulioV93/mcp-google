@@ -257,20 +257,36 @@ Confirm delete:
 def tasks_examples() -> str:
     return """Tasks examples
 
+List tasks from a known list:
+{
+  "tasklist_id": "abc",
+  "max_results": 20,
+  "show_completed": false
+}
+
 Create a task:
 {
-  "tasklist_id": "tasklist-123",
+  "tasklist_id": "abc",
   "task": {
-    "title": "Revisar setups",
-    "notes": "Maximo 2 setups y journal del dia",
-    "due": "2026-03-20T21:00:00Z"
+    "title": "Mi tarea",
+    "due": "2026-04-30T00:00:00.000Z"
+  }
+}
+
+Update a task:
+{
+  "tasklist_id": "abc",
+  "task_id": "task-123",
+  "task": {
+    "title": "Mi tarea actualizada",
+    "due": "2026-05-02T18:00:00.000Z"
   }
 }
 
 Complete a task:
 {
-  "tasklist_id": "tasklist-123",
-  "task_id": "task-456"
+  "tasklist_id": "abc",
+  "task_id": "task-123"
 }
 """
 
@@ -303,6 +319,12 @@ Confirm tasklist delete:
 
 def gmail_examples() -> str:
     return """Gmail examples
+
+List messages:
+{
+  "query": "from:person@example.com newer_than:7d",
+  "max_results": 10
+}
 
 Create a draft:
 {
@@ -352,6 +374,31 @@ Search before mutation:
   "mime_type": "application/pdf"
 }
 
+Export a Google Doc as PDF:
+{
+  "file_id": "file-123",
+  "export_mime_type": "application/pdf"
+}
+
+Prepare writing a Google Doc:
+{
+  "file_id": "file-123",
+  "content_text": "Resumen semanal\n- foco\n- metricas",
+  "mode": "replace"
+}
+
+Prepare writing a Google Sheet:
+{
+  "file_id": "file-123",
+  "sheet_name": "Resumen",
+  "create_sheet_if_missing": true,
+  "start_cell": "A1",
+  "values": [
+    ["Fecha", "PnL"],
+    ["2026-03-20", 125.5]
+  ]
+}
+
 Prepare share:
 {
   "file_id": "file-123",
@@ -360,12 +407,6 @@ Prepare share:
     "role": "reader",
     "email_address": "person@example.com"
   }
-}
-
-Export a Google Doc as PDF:
-{
-  "file_id": "file-123",
-  "export_mime_type": "application/pdf"
 }
 """
 
