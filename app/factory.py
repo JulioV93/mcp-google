@@ -6,7 +6,7 @@ from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Mount, Route
 
 from app.config import get_settings
@@ -15,6 +15,7 @@ from app.db.session import SessionLocal
 from app.errors import AppError, InternalError, ValidationError
 from app.logging import configure_logging
 from app.mcp_server import mcp
+from app.oauth.callback_page import callback_page
 from app.security.middleware import JWTAuthMiddleware
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
@@ -115,21 +116,22 @@ def create_app() -> Starlette:
             }
         )
 
-    async def oauth_google_callback(request: Request) -> JSONResponse:
+    async def oauth_google_callback(request: Request) -> HTMLResponse:
         state = request.query_params.get("state")
         code = request.query_params.get("code")
-        if not state or not code:
-            return _json_error_response(ValidationError("Missing code or state"))
+        provider_error = request.query_params.get("error")
+        if not state or (not code and not provider_error):
+            return callback_page("invalid", status_code=400)
 
         with SessionLocal() as session:
             audit_service = AuditService(session)
             service = AuthService(session, settings)
             try:
-                connection = service.complete_google_auth(
-                    state=state,
-                    code=code,
-                    authorization_response=str(request.url),
-                )
+                if provider_error:
+                    service.cancel_google_auth(state=state)
+                    result = "cancelled" if provider_error == "access_denied" else "error"
+                    return callback_page(result, status_code=200 if result == "cancelled" else 502)
+                connection = service.complete_google_auth(state=state, code=cast(str, code))
             except AppError as exc:
                 audit_service.record_tool_call(
                     external_subject="oauth-callback",
@@ -137,44 +139,37 @@ def create_app() -> Starlette:
                     tool_name="oauth_google_callback",
                     provider="google",
                     resource_type="oauth",
-                    arguments={"state": state},
+                    arguments={},
                     result_status="error",
                     error_code=exc.code,
                 )
-                return _json_error_response(exc)
-            except Exception:
-                logger.exception("Unexpected error completing Google OAuth callback")
-                error = InternalError(metadata={"endpoint": "/oauth/google/callback"})
+                result = "invalid" if isinstance(exc, ValidationError) else "error"
+                return callback_page(result, status_code=exc.status_code)
+            except Exception as exc:
+                # Provider exceptions can contain codes or tokens: log only their type.
+                logger.error("Google OAuth callback failed (%s)", type(exc).__name__)
                 audit_service.record_tool_call(
                     external_subject="oauth-callback",
                     tenant_id=None,
                     tool_name="oauth_google_callback",
                     provider="google",
                     resource_type="oauth",
-                    arguments={"state": state},
+                    arguments={},
                     result_status="error",
-                    error_code=error.code,
+                    error_code="internal_error",
                 )
-                return _json_error_response(error)
+                return callback_page("error", status_code=500)
             audit_service.record_tool_call(
-                external_subject=connection.user.external_subject if hasattr(connection, "user") else "oauth-callback",
+                external_subject=connection.user.external_subject,
                 tenant_id=None,
                 tool_name="oauth_google_callback",
                 provider="google",
                 resource_type="oauth",
-                arguments={"state": state},
+                arguments={},
                 result_status="success",
             )
 
-        return JSONResponse(
-            {
-                "connected": True,
-                "google_email": connection.google_email,
-                "google_subject": connection.google_subject,
-                "status": connection.status,
-                "scopes": connection.granted_scopes,
-            }
-        )
+        return callback_page("connected", email=connection.google_email)
 
     async def oauth_google_disconnect(request: Request) -> JSONResponse:
         context = request.state.request_context

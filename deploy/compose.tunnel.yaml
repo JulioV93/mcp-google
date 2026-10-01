@@ -1,0 +1,11 @@
+# Only when the EXISTING cloudflared runs in a Docker bridge network.
+services:
+  google-mcp:
+    networks:
+      - default
+      - tunnel
+
+networks:
+  tunnel:
+    external: true
+    name: ${CLOUDFLARED_NETWORK:?Set the existing cloudflared Docker network name}

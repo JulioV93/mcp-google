@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from pathlib import Path
 from typing import Any
 
 from fastmcp import Client
@@ -17,6 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="local-dev-token",
         help="Bearer token used to authenticate against the MCP server",
     )
+    parser.add_argument("--token-file", type=Path, help="Read the bearer token from a protected file")
     parser.add_argument(
         "--tool",
         default=None,
@@ -54,7 +56,8 @@ def main() -> None:
     tool_args = json.loads(args.args)
     if not isinstance(tool_args, dict):
         raise SystemExit("--args must decode to a JSON object")
-    asyncio.run(run_smoke_test(args.url, args.token, args.tool, tool_args))
+    token = args.token_file.read_text().strip() if args.token_file else args.token
+    asyncio.run(run_smoke_test(args.url, token, args.tool, tool_args))
 
 
 if __name__ == "__main__":

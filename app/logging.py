@@ -9,6 +9,10 @@ from typing import Any, cast
 
 REDACTED_KEYS = {
     "authorization",
+    "code",
+    "state",
+    "code_verifier",
+    "token_encryption_key",
     "access_token",
     "refresh_token",
     "token",

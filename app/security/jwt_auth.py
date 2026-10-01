@@ -62,6 +62,7 @@ def decode_jwt(token: str, settings: Settings) -> dict[str, object]:
         "algorithms": settings.jwt_algorithm_list,
         "audience": settings.jwt_audience,
         "issuer": settings.jwt_issuer,
+        "options": {"require": ["sub", "iss", "aud", "exp"]},
     }
 
     try:

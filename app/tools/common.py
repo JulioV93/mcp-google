@@ -40,8 +40,8 @@ def run_tool(
     operation: Callable[[Any, Any], dict[str, object]],
 ) -> dict[str, object]:
     context = require_context()
-    ensure_tool_approval(tool_name=tool_name, approved_tools=context.approvals)
     try:
+        ensure_tool_approval(tool_name=tool_name, approved_tools=context.approvals)
         return audited_call(
             external_subject=context.subject,
             tenant_id=context.tenant_id,
