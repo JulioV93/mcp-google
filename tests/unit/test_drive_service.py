@@ -17,6 +17,8 @@ from app.schemas.drive import (
     DriveConfirmOperationInput,
     DriveCreateFolderInput,
     DriveCreateNativeFileInput,
+    DriveFindFileByNameInput,
+    DriveFindFolderByNameInput,
     DriveInlineContentInput,
     DriveListFilesInput,
     DrivePrepareDeleteFileInput,
@@ -26,6 +28,7 @@ from app.schemas.drive import (
     DrivePrepareWriteGoogleSheetInput,
     DrivePrepareUploadInput,
     DrivePermissionInput,
+    DriveSearchFilesAdvancedInput,
 )
 from app.services.drive_service import DriveService
 
@@ -105,6 +108,129 @@ def test_create_folder_returns_normalized_payload() -> None:
     assert result["id"] == "folder-1"
     assert result["resource_identity"] == {"type": "drive_folder", "file_id": "folder-1"}
     assert result["mime_type"] == "application/vnd.google-apps.folder"
+
+
+def test_find_folder_by_name_returns_best_exact_match() -> None:
+    session = Mock()
+    service = DriveService(session)
+    service.client = Mock()
+    service.client.list_files.side_effect = [
+        {
+            "files": [
+                {
+                    "id": "folder-1",
+                    "name": "Sistema de Notas de Proyectos",
+                    "mimeType": "application/vnd.google-apps.folder",
+                    "parents": ["root"],
+                    "webViewLink": "https://drive.google.com/drive/folders/folder-1",
+                    "modifiedTime": "2026-05-01T12:00:00Z",
+                }
+            ]
+        },
+        {"files": []},
+        {"files": []},
+        {"files": []},
+    ]
+
+    result = service.find_folder_by_name(
+        external_subject="user-1",
+        input_data=DriveFindFolderByNameInput(name="Sistema de Notas de Proyectos"),
+    )
+
+    assert result["status"] == "found"
+    assert result["matches_count"] == 1
+    best_match = result["best_match"]
+    assert isinstance(best_match, dict)
+    assert best_match["id"] == "folder-1"
+    assert best_match["file_type"] == "folder"
+    assert best_match["match_type"] == "exact"
+    assert best_match["score"] == 1.0
+
+
+def test_find_file_by_name_maps_high_level_file_type() -> None:
+    session = Mock()
+    service = DriveService(session)
+    service.client = Mock()
+    service.client.list_files.side_effect = [
+        {
+            "files": [
+                {
+                    "id": "doc-1",
+                    "name": "Plan 2026",
+                    "mimeType": "application/vnd.google-apps.document",
+                    "modifiedTime": "2026-05-01T12:00:00Z",
+                }
+            ]
+        },
+        {"files": []},
+        {"files": []},
+    ]
+
+    result = service.find_file_by_name(
+        external_subject="user-1",
+        input_data=DriveFindFileByNameInput(name="Plan 2026", file_type="doc"),
+    )
+
+    best_match = result["best_match"]
+    assert isinstance(best_match, dict)
+    assert best_match["file_type"] == "doc"
+    queries = [call.kwargs.get("query") for call in service.client.list_files.call_args_list]
+    assert any("mimeType = 'application/vnd.google-apps.document'" in str(query) for query in queries)
+
+
+def test_find_file_by_name_marks_multiple_when_top_results_are_close() -> None:
+    session = Mock()
+    service = DriveService(session)
+    service.client = Mock()
+    service.client.list_files.side_effect = [
+        {"files": []},
+        {
+            "files": [
+                {
+                    "id": "doc-1",
+                    "name": "Plan 2026 Final",
+                    "mimeType": "application/vnd.google-apps.document",
+                    "modifiedTime": "2026-05-01T12:00:00Z",
+                },
+                {
+                    "id": "doc-2",
+                    "name": "Plan 2026 Borrador",
+                    "mimeType": "application/vnd.google-apps.document",
+                    "modifiedTime": "2026-05-01T11:00:00Z",
+                },
+            ]
+        },
+        {"files": []},
+    ]
+
+    result = service.find_file_by_name(
+        external_subject="user-1",
+        input_data=DriveFindFileByNameInput(name="Plan 2026", file_type="doc"),
+    )
+
+    assert result["status"] == "multiple"
+    assert result["matches_count"] == 2
+
+
+def test_search_files_advanced_returns_not_found_when_no_candidates_match() -> None:
+    session = Mock()
+    service = DriveService(session)
+    service.client = Mock()
+    service.client.list_files.return_value = {"files": []}
+
+    result = service.search_files_advanced(
+        external_subject="user-1",
+        input_data=DriveSearchFilesAdvancedInput(
+            terms=["Sistema", "Notas", "Proyectos"],
+            mime_types=["application/vnd.google-apps.folder"],
+            match_mode="all_terms",
+        ),
+    )
+
+    assert result["status"] == "not_found"
+    assert result["matches_count"] == 0
+    assert result["best_match"] is None
+    assert result["query_used"]["terms"] == ["Sistema", "Notas", "Proyectos"]
 
 
 def test_create_google_doc_returns_native_document() -> None:

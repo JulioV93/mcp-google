@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import unicodedata
+from difflib import SequenceMatcher
 from typing import cast
 
 from sqlalchemy.orm import Session
@@ -23,6 +25,8 @@ from app.schemas.drive import (
     DriveCreateShortcutInput,
     DriveDownloadFileInput,
     DriveExportFileInput,
+    DriveFindFileByNameInput,
+    DriveFindFolderByNameInput,
     DriveGetFileInput,
     DriveListFilesInput,
     DriveListPermissionsInput,
@@ -35,6 +39,7 @@ from app.schemas.drive import (
     DrivePrepareWriteGoogleSheetInput,
     DrivePrepareUploadInput,
     DriveSearchFilesInput,
+    DriveSearchFilesAdvancedInput,
     DriveUpdateMetadataInput,
     estimate_inline_bytes,
     is_google_native_mime_type,
@@ -73,6 +78,21 @@ GOOGLE_NATIVE_CREATE_TYPES: dict[str, str] = {
     "document": "application/vnd.google-apps.document",
     "spreadsheet": "application/vnd.google-apps.spreadsheet",
     "presentation": "application/vnd.google-apps.presentation",
+}
+
+FILE_TYPE_TO_MIME_TYPES: dict[str, list[str] | None] = {
+    "any": None,
+    "folder": ["application/vnd.google-apps.folder"],
+    "doc": ["application/vnd.google-apps.document"],
+    "sheet": ["application/vnd.google-apps.spreadsheet"],
+    "pdf": ["application/pdf"],
+}
+
+MIME_TYPE_TO_FILE_TYPE: dict[str, str] = {
+    "application/vnd.google-apps.folder": "folder",
+    "application/vnd.google-apps.document": "doc",
+    "application/vnd.google-apps.spreadsheet": "sheet",
+    "application/pdf": "pdf",
 }
 
 
@@ -153,6 +173,115 @@ class DriveService:
             human_summary=f"Found {len(items)} matching Drive file(s).",
             next_suggested_actions=["drive_get_file", "drive_download_file", "drive_prepare_share_file"],
             safety_level="read",
+        )
+
+    def find_folder_by_name(
+        self,
+        *,
+        external_subject: str,
+        input_data: DriveFindFolderByNameInput,
+        tenant_id: str | None = None,
+    ) -> dict[str, object]:
+        return self._smart_find_by_name(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            name=input_data.name,
+            file_type="folder",
+            exact=input_data.exact,
+            normalized=input_data.normalized,
+            include_trashed=input_data.include_trashed,
+            parent_id=input_data.parent_id,
+            max_results=input_data.max_results,
+        )
+
+    def find_file_by_name(
+        self,
+        *,
+        external_subject: str,
+        input_data: DriveFindFileByNameInput,
+        tenant_id: str | None = None,
+    ) -> dict[str, object]:
+        return self._smart_find_by_name(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            name=input_data.name,
+            file_type=input_data.file_type,
+            exact=input_data.exact,
+            normalized=input_data.normalized,
+            include_trashed=input_data.include_trashed,
+            parent_id=input_data.parent_id,
+            max_results=input_data.max_results,
+        )
+
+    def search_files_advanced(
+        self,
+        *,
+        external_subject: str,
+        input_data: DriveSearchFilesAdvancedInput,
+        tenant_id: str | None = None,
+    ) -> dict[str, object]:
+        terms = [term.strip() for term in input_data.terms if term.strip()]
+        seen_ids: set[str] = set()
+        candidates: list[dict[str, object]] = []
+        strategies: list[str] = []
+
+        phrase = " ".join(terms)
+        if phrase:
+            candidates.extend(
+                self._collect_drive_candidates(
+                    external_subject=external_subject,
+                    tenant_id=tenant_id,
+                    name=phrase,
+                    mime_types=input_data.mime_types,
+                    include_trashed=input_data.include_trashed,
+                    parent_id=input_data.parent_id,
+                    page_size=input_data.page_size,
+                    seen_ids=seen_ids,
+                    strategy_name="phrase_partial",
+                    strategies=strategies,
+                )
+            )
+        token_name = " ".join(terms) if input_data.match_mode == "all_terms" else None
+        for term in terms:
+            candidates.extend(
+                self._collect_drive_candidates(
+                    external_subject=external_subject,
+                    tenant_id=tenant_id,
+                    name=token_name or term,
+                    mime_types=input_data.mime_types,
+                    include_trashed=input_data.include_trashed,
+                    parent_id=input_data.parent_id,
+                    page_size=input_data.page_size,
+                    seen_ids=seen_ids,
+                    strategy_name=f"term:{term}",
+                    strategies=strategies,
+                )
+            )
+
+        matches = self._rank_candidates(
+            candidates=candidates,
+            target_name=phrase,
+            normalized=input_data.normalized,
+            allow_fuzzy=input_data.fuzzy,
+            required_terms=terms if input_data.match_mode == "all_terms" else [],
+            preferred_terms=terms,
+            max_results=input_data.page_size,
+        )
+        return self._build_smart_search_response(
+            matches=matches,
+            query_used={
+                "terms": terms,
+                "mime_types": input_data.mime_types or [],
+                "match_mode": input_data.match_mode,
+                "normalized": input_data.normalized,
+                "fuzzy": input_data.fuzzy,
+                "include_trashed": input_data.include_trashed,
+                "parent_id": input_data.parent_id,
+                "strategies": strategies,
+            },
+            resource_type="drive_file_collection",
+            human_summary=_build_find_summary(matches, label="Drive file"),
+            next_suggested_actions=["drive_get_file", "drive_export_file", "drive_prepare_share_file"],
         )
 
     def get_file(
@@ -606,6 +735,218 @@ class DriveService:
             human_summary=f"Created {summary_label} '{normalized.get('name') or normalized.get('id')}'.",
             next_suggested_actions=next_suggested_actions,
             safety_level="write",
+        )
+
+    def _smart_find_by_name(
+        self,
+        *,
+        external_subject: str,
+        tenant_id: str | None,
+        name: str,
+        file_type: str,
+        exact: bool,
+        normalized: bool,
+        include_trashed: bool,
+        parent_id: str | None,
+        max_results: int,
+    ) -> dict[str, object]:
+        mime_types = FILE_TYPE_TO_MIME_TYPES[file_type]
+        seen_ids: set[str] = set()
+        candidates: list[dict[str, object]] = []
+        strategies: list[str] = []
+        normalized_name = _normalize_match_text(name)
+
+        if exact:
+            candidates.extend(
+                self._collect_drive_candidates(
+                    external_subject=external_subject,
+                    tenant_id=tenant_id,
+                    exact_name=name,
+                    mime_types=mime_types,
+                    include_trashed=include_trashed,
+                    parent_id=parent_id,
+                    page_size=max_results,
+                    seen_ids=seen_ids,
+                    strategy_name="exact_original",
+                    strategies=strategies,
+                )
+            )
+        if not candidates and normalized and normalized_name and normalized_name != name.casefold():
+            candidates.extend(
+                self._collect_drive_candidates(
+                    external_subject=external_subject,
+                    tenant_id=tenant_id,
+                    name=normalized_name,
+                    mime_types=mime_types,
+                    include_trashed=include_trashed,
+                    parent_id=parent_id,
+                    page_size=max_results,
+                    seen_ids=seen_ids,
+                    strategy_name="exact_normalized_candidate",
+                    strategies=strategies,
+                )
+            )
+        if not candidates:
+            candidates.extend(
+                self._collect_drive_candidates(
+                    external_subject=external_subject,
+                    tenant_id=tenant_id,
+                    name=name,
+                    mime_types=mime_types,
+                    include_trashed=include_trashed,
+                    parent_id=parent_id,
+                    page_size=max_results,
+                    seen_ids=seen_ids,
+                    strategy_name="partial_original",
+                    strategies=strategies,
+                )
+            )
+        if not candidates:
+            for token in _tokenize_match_text(name):
+                candidates.extend(
+                    self._collect_drive_candidates(
+                        external_subject=external_subject,
+                        tenant_id=tenant_id,
+                        name=token,
+                        mime_types=mime_types,
+                        include_trashed=include_trashed,
+                        parent_id=parent_id,
+                        page_size=max_results,
+                        seen_ids=seen_ids,
+                        strategy_name=f"token:{token}",
+                        strategies=strategies,
+                    )
+                )
+                if candidates:
+                    break
+
+        matches = self._rank_candidates(
+            candidates=candidates,
+            target_name=name,
+            normalized=normalized,
+            allow_fuzzy=True,
+            required_terms=[],
+            preferred_terms=_tokenize_match_text(name),
+            max_results=max_results,
+        )
+        return self._build_smart_search_response(
+            matches=matches,
+            query_used={
+                "name": name,
+                "file_type": file_type,
+                "exact": exact,
+                "normalized": normalized,
+                "include_trashed": include_trashed,
+                "parent_id": parent_id,
+                "strategies": strategies,
+            },
+            resource_type="drive_file_collection",
+            human_summary=_build_find_summary(matches, label="Drive file" if file_type != "folder" else "Drive folder"),
+            next_suggested_actions=["drive_get_file", "drive_export_file", "drive_prepare_share_file"],
+        )
+
+    def _collect_drive_candidates(
+        self,
+        *,
+        external_subject: str,
+        tenant_id: str | None,
+        seen_ids: set[str],
+        strategy_name: str,
+        strategies: list[str],
+        page_size: int,
+        exact_name: str | None = None,
+        name: str | None = None,
+        mime_types: list[str] | None = None,
+        include_trashed: bool,
+        parent_id: str | None,
+    ) -> list[dict[str, object]]:
+        strategies.append(strategy_name)
+        raw_items: list[dict[str, object]] = []
+        target_mime_types = mime_types or [None]
+        for mime_type in target_mime_types:
+            query = _build_drive_query(
+                exact_name=exact_name,
+                name=name,
+                mime_type=mime_type,
+                parent_id=parent_id,
+                include_trashed=include_trashed,
+            )
+            payload = self.client.list_files(
+                external_subject=external_subject,
+                tenant_id=tenant_id,
+                query=query,
+                page_size=page_size,
+            )
+            normalized = _normalize_file_list(payload)
+            items = normalized.get("items")
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                file_id = _nullable_str(item.get("id"))
+                if not file_id or file_id in seen_ids:
+                    continue
+                seen_ids.add(file_id)
+                raw_items.append(item)
+        return raw_items
+
+    def _rank_candidates(
+        self,
+        *,
+        candidates: list[dict[str, object]],
+        target_name: str,
+        normalized: bool,
+        allow_fuzzy: bool,
+        required_terms: list[str],
+        preferred_terms: list[str],
+        max_results: int,
+    ) -> list[dict[str, object]]:
+        ranked: list[dict[str, object]] = []
+        for item in candidates:
+            match = _score_drive_match(
+                item=item,
+                target_name=target_name,
+                normalized=normalized,
+                allow_fuzzy=allow_fuzzy,
+                required_terms=required_terms,
+                preferred_terms=preferred_terms,
+            )
+            if match is not None:
+                ranked.append(match)
+        ranked.sort(
+            key=lambda item: (
+                -float(item.get("score", 0.0)),
+                _sortable_modified_time(item.get("modified_time")),
+            )
+        )
+        return ranked[:max_results]
+
+    def _build_smart_search_response(
+        self,
+        *,
+        matches: list[dict[str, object]],
+        query_used: dict[str, object],
+        resource_type: str,
+        human_summary: str,
+        next_suggested_actions: list[str],
+    ) -> dict[str, object]:
+        best_match = matches[0] if matches else None
+        status = _resolve_match_status(matches)
+        payload: dict[str, object] = {
+            "status": status,
+            "best_match": best_match,
+            "matches": matches,
+            "matches_count": len(matches),
+            "query_used": query_used,
+        }
+        return enrich_resource(
+            payload,
+            resource_type=resource_type,
+            human_summary=human_summary,
+            next_suggested_actions=next_suggested_actions,
+            safety_level="read",
+            status=status,
         )
 
     def update_metadata(
@@ -1093,6 +1434,7 @@ def _normalize_file_list(payload: dict[str, object]) -> dict[str, object]:
 
 
 def _normalize_file(payload: dict[str, object]) -> dict[str, object]:
+    mime_type = _nullable_str(payload.get("mimeType"))
     owners = payload.get("owners", [])
     owner_items = []
     if isinstance(owners, list):
@@ -1108,7 +1450,8 @@ def _normalize_file(payload: dict[str, object]) -> dict[str, object]:
     return {
         "id": payload.get("id"),
         "name": payload.get("name"),
-        "mime_type": payload.get("mimeType"),
+        "file_type": _file_type_from_mime_type(mime_type),
+        "mime_type": mime_type,
         "parents": payload.get("parents", []),
         "size": payload.get("size"),
         "web_view_link": payload.get("webViewLink"),
@@ -1137,6 +1480,7 @@ def _normalize_permission(payload: dict[str, object]) -> dict[str, object]:
 def _build_drive_query(
     *,
     text_query: str | None = None,
+    exact_name: str | None = None,
     name: str | None = None,
     mime_type: str | None = None,
     parent_id: str | None = None,
@@ -1149,6 +1493,8 @@ def _build_drive_query(
         parts.append(f"'{_escape_query_value(parent_id)}' in parents")
     if mime_type:
         parts.append(f"mimeType = '{_escape_query_value(mime_type)}'")
+    if exact_name:
+        parts.append(f"name = '{_escape_query_value(exact_name)}'")
     if name:
         parts.append(f"name contains '{_escape_query_value(name)}'")
     if text_query:
@@ -1184,3 +1530,101 @@ def _escape_query_value(value: str) -> str:
 
 def _nullable_str(value: object) -> str | None:
     return value if isinstance(value, str) and value else None
+
+
+def _file_type_from_mime_type(mime_type: str | None) -> str:
+    if mime_type is None:
+        return "any"
+    return MIME_TYPE_TO_FILE_TYPE.get(mime_type, "any")
+
+
+def _normalize_match_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value)
+    without_marks = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    collapsed = " ".join(without_marks.casefold().split())
+    return collapsed.strip()
+
+
+def _tokenize_match_text(value: str) -> list[str]:
+    normalized = _normalize_match_text(value)
+    if not normalized:
+        return []
+    return [token for token in normalized.split(" ") if token]
+
+
+def _score_drive_match(
+    *,
+    item: dict[str, object],
+    target_name: str,
+    normalized: bool,
+    allow_fuzzy: bool,
+    required_terms: list[str],
+    preferred_terms: list[str],
+) -> dict[str, object] | None:
+    candidate_name = _nullable_str(item.get("name")) or ""
+    candidate_name_normalized = _normalize_match_text(candidate_name)
+    target_name_normalized = _normalize_match_text(target_name)
+    candidate_terms = set(_tokenize_match_text(candidate_name))
+    required_normalized = [_normalize_match_text(term) for term in required_terms if _normalize_match_text(term)]
+    if required_normalized and not all(term in candidate_terms for term in required_normalized):
+        return None
+
+    match_type = "fuzzy"
+    score = 0.0
+    if candidate_name == target_name and target_name:
+        match_type = "exact"
+        score = 1.0
+    elif normalized and candidate_name_normalized == target_name_normalized and target_name_normalized:
+        match_type = "exact_normalized"
+        score = 0.96
+    elif target_name_normalized and target_name_normalized in candidate_name_normalized:
+        match_type = "partial"
+        score = 0.88
+    else:
+        preferred_normalized = [_normalize_match_text(term) for term in preferred_terms if _normalize_match_text(term)]
+        matched_terms = sum(1 for term in preferred_normalized if term in candidate_terms)
+        if preferred_normalized and matched_terms:
+            coverage = matched_terms / len(preferred_normalized)
+            score = max(score, 0.7 + (coverage * 0.15))
+            match_type = "partial"
+        if allow_fuzzy and target_name_normalized and candidate_name_normalized:
+            fuzzy_score = SequenceMatcher(None, candidate_name_normalized, target_name_normalized).ratio()
+            if fuzzy_score >= 0.72:
+                score = max(score, round(min(0.84, fuzzy_score), 4))
+                if score < 0.85:
+                    match_type = "fuzzy"
+
+    if score <= 0.0:
+        return None
+    result = dict(item)
+    result["match_type"] = match_type
+    result["score"] = round(score, 4)
+    return result
+
+
+def _sortable_modified_time(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    return ""
+
+
+def _resolve_match_status(matches: list[dict[str, object]]) -> str:
+    if not matches:
+        return "not_found"
+    if len(matches) == 1:
+        return "found"
+    top_score = float(matches[0].get("score", 0.0))
+    second_score = float(matches[1].get("score", 0.0))
+    if top_score >= 0.95 and top_score - second_score >= 0.08:
+        return "found"
+    return "multiple"
+
+
+def _build_find_summary(matches: list[dict[str, object]], *, label: str) -> str:
+    if not matches:
+        return f"No {label.lower()} matches found."
+    status = _resolve_match_status(matches)
+    if status == "found":
+        best = matches[0]
+        return f"Best {label.lower()} match is '{best.get('name') or best.get('id')}'."
+    return f"Found {len(matches)} candidate {label.lower()} matches."
