@@ -17,7 +17,10 @@ def main() -> None:
     parser.add_argument("--env", type=Path, default=Path(".env"))
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("init", help="Fill missing internal keys without rotating existing keys")
-    issue = commands.add_parser("issue-token", help="Issue a read-only MCP JWT valid for one hour")
+    issue = commands.add_parser(
+        "issue-token",
+        help="Issue an MCP JWT: one hour, or no expiration when JWT_ALLOW_NON_EXPIRING_TOKENS=true",
+    )
     issue.add_argument("--subject", required=True, help="Stable, distinct MCP identity for each person")
     issue.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -45,10 +48,13 @@ def main() -> None:
     if not settings.jwt_shared_secret or len(settings.jwt_shared_secret.encode()) < 32:
         parser.error("Configure a signing secret of at least 32 bytes")
     now = datetime.now(UTC)
-    token = jwt.encode({
+    claims = {
         "sub": args.subject, "iss": settings.jwt_issuer, "aud": settings.jwt_audience,
-        "iat": now, "exp": now + timedelta(hours=1),
-    }, settings.jwt_shared_secret, algorithm="HS256")
+        "iat": now,
+    }
+    if not settings.jwt_allow_non_expiring_tokens:
+        claims["exp"] = now + timedelta(hours=1)
+    token = jwt.encode(claims, settings.jwt_shared_secret, algorithm="HS256")
     fd = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w") as output:
         output.write(token + "\n")

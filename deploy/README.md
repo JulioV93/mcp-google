@@ -42,9 +42,39 @@ la base sigue conteniendo otros datos privados y debe protegerse y respaldarse.
   emisor `urn:jm-homelab:google-mcp`. No existe un endpoint público emisor de JWT.
 
 La utilidad `scripts/homelab_credentials.py` permite inicializar las claves que
-faltan y emitir JWT de una hora en archivos 600. No rota claves existentes,
+faltan y emitir JWT en archivos 600. Por defecto duran una hora; con
+`JWT_ALLOW_NON_EXPIRING_TOKENS=true`, se emiten y aceptan sin vencimiento. No rota
+claves existentes,
 no imprime tokens ni incluye `approved_tools`. El smoke test admite `--token-file`
 para evitar pasar credenciales en argumentos visibles de procesos.
+
+### JWT sin vencimiento durante la marcha blanca
+
+La plantilla de despliegue activa `JWT_ALLOW_NON_EXPIRING_TOKENS=true`.
+Para un despliegue existente, añadir esa variable al `.env` y recrear el servicio
+para que cargue la configuración:
+
+```bash
+docker compose up -d --force-recreate google-mcp
+```
+
+En el entorno administrativo con las dependencias instaladas, emitir un token
+con el mismo `sub` que ya usa la persona (archivo de salida nuevo):
+
+```bash
+python -m scripts.homelab_credentials --env /ruta/al/.env issue-token \
+  --subject julio --output /ruta/privada/julio-mcp.jwt
+```
+
+Usar ese JWT como bearer en la configuración de Hermes u otro cliente MCP.
+Sólo hay que reemplazarlo una vez. No entregar al cliente `JWT_SHARED_SECRET`.
+Los JWT existentes conservan su vencimiento; activar la opción no los modifica.
+Incluso con la opción activa, un JWT que incluya `exp` vencido se rechaza.
+
+No hay revocación individual: cambiar la clave de firma invalida todos los JWT
+firmados con ella. Desactivar la opción rechaza todos los JWT sin vencimiento y
+vuelve a emitir tokens de una hora. Los permisos de herramientas y la renovación
+o revocación de las credenciales Google mantienen su comportamiento actual.
 
 No copiar access/refresh tokens de Google al `.env`. Se obtienen con consentimiento.
 No mostrar secretos, estados OAuth, URLs completas de callback, variables reales,

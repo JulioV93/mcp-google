@@ -138,6 +138,9 @@ class Settings(BaseSettings):
     jwt_jwks_url: Optional[str] = Field(default=None, validation_alias="JWT_JWKS_URL")
     jwt_public_key: Optional[str] = Field(default=None, validation_alias="JWT_PUBLIC_KEY")
     jwt_shared_secret: Optional[str] = Field(default=None, validation_alias="JWT_SHARED_SECRET")
+    jwt_allow_non_expiring_tokens: bool = Field(
+        default=False, validation_alias="JWT_ALLOW_NON_EXPIRING_TOKENS"
+    )
     jwt_test_mode: bool = Field(default=False, validation_alias="JWT_TEST_MODE")
     jwt_test_token: str = Field(default="local-dev-token", validation_alias="JWT_TEST_TOKEN")
     jwt_test_subject: str = Field(
