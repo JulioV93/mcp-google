@@ -17,6 +17,7 @@ os.environ.update(
     ALLOWED_HOSTS="",
     ALLOWED_ORIGINS="http://localhost:8000,http://127.0.0.1:8000",
     TOKEN_ENCRYPTION_KEY=Fernet.generate_key().decode(),
+    JWT_ALLOW_NON_EXPIRING_TOKENS="false",
     JWT_TEST_MODE="true",
     JWT_TEST_TOKEN="local-dev-token",
     JWT_TEST_SUBJECT="local-dev-user",

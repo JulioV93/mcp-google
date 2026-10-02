@@ -20,7 +20,7 @@ def main() -> None:
     commands.add_parser("init", help="Fill missing internal keys without rotating existing keys")
     issue = commands.add_parser(
         "issue-token",
-        help="Issue an MCP JWT valid for one hour; read-only unless tools are approved",
+        help="Issue an MCP JWT: one hour, or no expiration when JWT_ALLOW_NON_EXPIRING_TOKENS=true",
     )
     issue.add_argument(
         "--subject", required=True, help="Stable, distinct MCP identity for each person"
@@ -62,8 +62,9 @@ def main() -> None:
         "iss": settings.jwt_issuer,
         "aud": settings.jwt_audience,
         "iat": now,
-        "exp": now + timedelta(hours=1),
     }
+    if not settings.jwt_allow_non_expiring_tokens:
+        claims["exp"] = now + timedelta(hours=1)
     if args.tenant_id is not None:
         claims["tenant_id"] = args.tenant_id
     if args.approve_tool:
