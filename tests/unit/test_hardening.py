@@ -42,8 +42,12 @@ def test_rate_limit_returns_429_when_limit_is_reached() -> None:
     wrapped.rate_limiter.limit_per_minute = 1
 
     with TestClient(wrapped) as client:
-        first = client.get("/oauth/google/status", headers={"Authorization": "Bearer local-dev-token"})
-        second = client.get("/oauth/google/status", headers={"Authorization": "Bearer local-dev-token"})
+        first = client.get(
+            "/oauth/google/status", headers={"Authorization": "Bearer local-dev-token"}
+        )
+        second = client.get(
+            "/oauth/google/status", headers={"Authorization": "Bearer local-dev-token"}
+        )
 
     assert first.status_code == 200
     assert second.status_code == 429

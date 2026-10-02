@@ -4,7 +4,6 @@ from fastmcp import FastMCP
 
 from app.config import Settings
 from app.services.auth_service import AuthService
-
 from app.tools.common import run_tool
 
 

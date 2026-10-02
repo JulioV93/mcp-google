@@ -1,10 +1,12 @@
 """Unit tests always use disposable credentials and a disposable SQLite database."""
+
 import atexit
 import os
 from tempfile import TemporaryDirectory
 
 from cryptography.fernet import Fernet
 
+from app.config import Settings
 
 _database = TemporaryDirectory(prefix="mcp-google-test-")
 atexit.register(_database.cleanup)
@@ -27,10 +29,12 @@ os.environ.update(
     GOOGLE_CLIENT_ID="test-client.apps.googleusercontent.com",
     GOOGLE_CLIENT_SECRET="test-only-not-a-real-secret",
     REQUIRE_EXPLICIT_APPROVAL="false",
+    APPROVAL_REQUIRED_TOOLS=Settings.model_fields["approval_required_tools"].default,
+    GOOGLE_OAUTH_SCOPES=Settings.model_fields["google_oauth_scopes"].default,
 )
 
-from app.db.base import Base  # noqa: E402
-from app.db.session import engine  # noqa: E402
-import app.db.models  # noqa: E402,F401
+import app.db.models  # noqa: F401
+from app.db.base import Base
+from app.db.session import engine
 
 Base.metadata.create_all(engine)

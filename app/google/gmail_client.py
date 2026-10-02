@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 from email.message import EmailMessage
 
-from googleapiclient.discovery import build
 from sqlalchemy.orm import Session
 
 from app.config import Settings
@@ -40,11 +39,9 @@ class GmailClient(GoogleApiClientBase):
         super().__init__(session, settings)
 
     def _service(self, *, external_subject: str, tenant_id: str | None = None):
-        credentials = self.credentials_provider.get_for_user(
-            external_subject=external_subject,
-            tenant_id=tenant_id,
+        return self._get_service(
+            "gmail", "v1", external_subject=external_subject, tenant_id=tenant_id
         )
-        return build("gmail", "v1", credentials=credentials, cache_discovery=False)
 
     def list_messages(
         self,
@@ -102,7 +99,9 @@ class GmailClient(GoogleApiClientBase):
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        return self._execute(service.users().drafts().create(userId="me", body={"message": message_body}))
+        return self._execute(
+            service.users().drafts().create(userId="me", body={"message": message_body})
+        )
 
     def update_draft(
         self,
@@ -114,7 +113,9 @@ class GmailClient(GoogleApiClientBase):
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
         return self._execute(
-            service.users().drafts().update(
+            service.users()
+            .drafts()
+            .update(
                 userId="me",
                 id=draft_id,
                 body={"id": draft_id, "message": message_body},

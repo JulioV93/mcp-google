@@ -109,3 +109,7 @@ Esto levanta:
 ```bash
 pytest
 ```
+
+## Seguridad y migración
+
+Antes de actualizar un servidor existente, revisar [la guía de seguridad, recursos y migración](docs/21-seguridad-recursos-y-migracion.md). Esta versión requiere `alembic upgrade head`, la clave Fernet existente y un único worker.

@@ -3,13 +3,12 @@ from __future__ import annotations
 import base64
 import io
 
-from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 from sqlalchemy.orm import Session
 
 from app.config import Settings
+from app.errors import DriveContentTooLargeError
 from app.google.client_base import GoogleApiClientBase
-
 
 DRIVE_FILE_FIELDS = (
     "id,name,mimeType,parents,size,webViewLink,webContentLink,trashed,createdTime,modifiedTime,"
@@ -22,25 +21,19 @@ class DriveClient(GoogleApiClientBase):
         super().__init__(session, settings)
 
     def _service(self, *, external_subject: str, tenant_id: str | None = None):
-        credentials = self.credentials_provider.get_for_user(
-            external_subject=external_subject,
-            tenant_id=tenant_id,
+        return self._get_service(
+            "drive", "v3", external_subject=external_subject, tenant_id=tenant_id
         )
-        return build("drive", "v3", credentials=credentials, cache_discovery=False)
 
     def _docs_service(self, *, external_subject: str, tenant_id: str | None = None):
-        credentials = self.credentials_provider.get_for_user(
-            external_subject=external_subject,
-            tenant_id=tenant_id,
+        return self._get_service(
+            "docs", "v1", external_subject=external_subject, tenant_id=tenant_id
         )
-        return build("docs", "v1", credentials=credentials, cache_discovery=False)
 
     def _sheets_service(self, *, external_subject: str, tenant_id: str | None = None):
-        credentials = self.credentials_provider.get_for_user(
-            external_subject=external_subject,
-            tenant_id=tenant_id,
+        return self._get_service(
+            "sheets", "v4", external_subject=external_subject, tenant_id=tenant_id
         )
-        return build("sheets", "v4", credentials=credentials, cache_discovery=False)
 
     def list_files(
         self,
@@ -64,7 +57,9 @@ class DriveClient(GoogleApiClientBase):
             kwargs["pageToken"] = page_token
         return self._execute(service.files().list(**kwargs))
 
-    def get_file(self, *, external_subject: str, file_id: str, tenant_id: str | None = None) -> dict[str, object]:
+    def get_file(
+        self, *, external_subject: str, file_id: str, tenant_id: str | None = None
+    ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
         return self._execute(
             service.files().get(
@@ -74,15 +69,20 @@ class DriveClient(GoogleApiClientBase):
             )
         )
 
-    def download_file(self, *, external_subject: str, file_id: str, tenant_id: str | None = None) -> bytes:
+    def download_file(
+        self, *, external_subject: str, file_id: str, tenant_id: str | None = None
+    ) -> bytes:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
+
         def perform_download() -> bytes:
             request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
-            buffer = io.BytesIO()
-            downloader = MediaIoBaseDownload(buffer, request)
+            buffer = LimitedDownloadBuffer(self.settings.drive_inline_content_limit_bytes)
+            downloader = MediaIoBaseDownload(buffer, request, chunksize=65536)
             done = False
             while not done:
                 _, done = downloader.next_chunk()
+                if buffer.tell() > self.settings.drive_inline_content_limit_bytes:
+                    raise DriveContentTooLargeError()
             return buffer.getvalue()
 
         return self._execute_operation(perform_download)
@@ -96,13 +96,16 @@ class DriveClient(GoogleApiClientBase):
         tenant_id: str | None = None,
     ) -> bytes:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
+
         def perform_export() -> bytes:
             request = service.files().export_media(fileId=file_id, mimeType=export_mime_type)
-            buffer = io.BytesIO()
-            downloader = MediaIoBaseDownload(buffer, request)
+            buffer = LimitedDownloadBuffer(self.settings.drive_inline_content_limit_bytes)
+            downloader = MediaIoBaseDownload(buffer, request, chunksize=65536)
             done = False
             while not done:
                 _, done = downloader.next_chunk()
+                if buffer.tell() > self.settings.drive_inline_content_limit_bytes:
+                    raise DriveContentTooLargeError()
             return buffer.getvalue()
 
         return self._execute_operation(perform_export)
@@ -122,7 +125,9 @@ class DriveClient(GoogleApiClientBase):
         }
         if parent_id:
             body["parents"] = [parent_id]
-        return self._execute(service.files().create(body=body, fields=DRIVE_FILE_FIELDS, supportsAllDrives=True))
+        return self._execute(
+            service.files().create(body=body, fields=DRIVE_FILE_FIELDS, supportsAllDrives=True)
+        )
 
     def create_native_file(
         self,
@@ -140,7 +145,9 @@ class DriveClient(GoogleApiClientBase):
         }
         if parent_id:
             body["parents"] = [parent_id]
-        return self._execute(service.files().create(body=body, fields=DRIVE_FILE_FIELDS, supportsAllDrives=True))
+        return self._execute(
+            service.files().create(body=body, fields=DRIVE_FILE_FIELDS, supportsAllDrives=True)
+        )
 
     def create_shortcut(
         self,
@@ -159,7 +166,9 @@ class DriveClient(GoogleApiClientBase):
         }
         if parent_id:
             body["parents"] = [parent_id]
-        return self._execute(service.files().create(body=body, fields=DRIVE_FILE_FIELDS, supportsAllDrives=True))
+        return self._execute(
+            service.files().create(body=body, fields=DRIVE_FILE_FIELDS, supportsAllDrives=True)
+        )
 
     def write_google_doc(
         self,
@@ -172,7 +181,9 @@ class DriveClient(GoogleApiClientBase):
     ) -> dict[str, object]:
         service = self._docs_service(external_subject=external_subject, tenant_id=tenant_id)
         document = self._execute(service.documents().get(documentId=file_id))
-        body_content = document.get("body", {}).get("content", []) if isinstance(document, dict) else []
+        body_content = (
+            document.get("body", {}).get("content", []) if isinstance(document, dict) else []
+        )
         current_end_index = 1
         if isinstance(body_content, list):
             for item in body_content:
@@ -229,7 +240,9 @@ class DriveClient(GoogleApiClientBase):
         range_name = f"{target_sheet_name}!{start_cell}"
         if mode == "append":
             return self._execute(
-                service.spreadsheets().values().append(
+                service.spreadsheets()
+                .values()
+                .append(
                     spreadsheetId=file_id,
                     range=range_name,
                     valueInputOption="USER_ENTERED",
@@ -238,7 +251,9 @@ class DriveClient(GoogleApiClientBase):
                 )
             )
         return self._execute(
-            service.spreadsheets().values().update(
+            service.spreadsheets()
+            .values()
+            .update(
                 spreadsheetId=file_id,
                 range=range_name,
                 valueInputOption="USER_ENTERED",
@@ -380,7 +395,9 @@ class DriveClient(GoogleApiClientBase):
             )
         )
 
-    def trash_file(self, *, external_subject: str, file_id: str, tenant_id: str | None = None) -> dict[str, object]:
+    def trash_file(
+        self, *, external_subject: str, file_id: str, tenant_id: str | None = None
+    ) -> dict[str, object]:
         return self.update_metadata(
             external_subject=external_subject,
             file_id=file_id,
@@ -453,3 +470,14 @@ class DriveClient(GoogleApiClientBase):
 
 def encode_bytes_to_base64(content: bytes) -> str:
     return base64.b64encode(content).decode("ascii")
+
+
+class LimitedDownloadBuffer(io.BytesIO):
+    def __init__(self, limit: int):
+        super().__init__()
+        self.limit = limit
+
+    def write(self, value):
+        if self.tell() + len(value) > self.limit:
+            raise DriveContentTooLargeError()
+        return super().write(value)

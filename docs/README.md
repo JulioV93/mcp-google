@@ -40,3 +40,5 @@ Este directorio separa la planificacion acordada para el servidor MCP multiusuar
 - CRUD para Calendar y Tasks.
 - Lectura, drafts, envio y borrado para Gmail.
 - `PostgreSQL`, cifrado de tokens y auditoria basica.
+
+- [21. Seguridad, recursos y migración](21-seguridad-recursos-y-migracion.md)

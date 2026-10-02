@@ -8,9 +8,8 @@ Create Date: 2026-03-14 12:00:00
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "20260314_120000"
 down_revision = "20260310_180900"
@@ -34,13 +33,22 @@ def upgrade() -> None:
         sa.Column("status", sa.String(length=50), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("confirmed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("operation_key"),
     )
-    op.create_index(op.f("ix_pending_google_operations_user_id"), "pending_google_operations", ["user_id"], unique=False)
+    op.create_index(
+        op.f("ix_pending_google_operations_user_id"),
+        "pending_google_operations",
+        ["user_id"],
+        unique=False,
+    )
     op.create_index(
         op.f("ix_pending_google_operations_operation_key"),
         "pending_google_operations",
@@ -68,9 +76,19 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(op.f("ix_pending_google_operations_expires_at"), table_name="pending_google_operations")
-    op.drop_index(op.f("ix_pending_google_operations_status"), table_name="pending_google_operations")
-    op.drop_index(op.f("ix_pending_google_operations_operation_type"), table_name="pending_google_operations")
-    op.drop_index(op.f("ix_pending_google_operations_operation_key"), table_name="pending_google_operations")
-    op.drop_index(op.f("ix_pending_google_operations_user_id"), table_name="pending_google_operations")
+    op.drop_index(
+        op.f("ix_pending_google_operations_expires_at"), table_name="pending_google_operations"
+    )
+    op.drop_index(
+        op.f("ix_pending_google_operations_status"), table_name="pending_google_operations"
+    )
+    op.drop_index(
+        op.f("ix_pending_google_operations_operation_type"), table_name="pending_google_operations"
+    )
+    op.drop_index(
+        op.f("ix_pending_google_operations_operation_key"), table_name="pending_google_operations"
+    )
+    op.drop_index(
+        op.f("ix_pending_google_operations_user_id"), table_name="pending_google_operations"
+    )
     op.drop_table("pending_google_operations")

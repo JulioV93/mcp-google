@@ -18,7 +18,9 @@ def build_parser() -> argparse.ArgumentParser:
         default="local-dev-token",
         help="Bearer token used to authenticate against the MCP server",
     )
-    parser.add_argument("--token-file", type=Path, help="Read the bearer token from a protected file")
+    parser.add_argument(
+        "--token-file", type=Path, help="Read the bearer token from a protected file"
+    )
     parser.add_argument(
         "--tool",
         default=None,
@@ -32,7 +34,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def run_smoke_test(url: str, token: str, tool_name: str | None, tool_args: dict[str, Any]) -> None:
+async def run_smoke_test(
+    url: str, token: str, tool_name: str | None, tool_args: dict[str, Any]
+) -> None:
     transport = StreamableHttpTransport(
         url=url,
         headers={"Authorization": f"Bearer {token}"},

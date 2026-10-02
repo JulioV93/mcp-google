@@ -2,17 +2,24 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-
 GOOGLE_NATIVE_MIME_PREFIX = "application/vnd.google-apps."
 
 
 class DriveListFilesInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    page_size: int = Field(default=20, ge=1, le=100, description="Maximum number of files to return.")
-    page_token: str | None = Field(default=None, description="Pagination token from a previous list response.")
-    parent_id: str | None = Field(default=None, description="Optional parent folder ID to scope the listing.")
-    include_trashed: bool = Field(default=False, description="Whether trashed files should be included.")
+    page_size: int = Field(
+        default=20, ge=1, le=100, description="Maximum number of files to return."
+    )
+    page_token: str | None = Field(
+        default=None, description="Pagination token from a previous list response."
+    )
+    parent_id: str | None = Field(
+        default=None, description="Optional parent folder ID to scope the listing."
+    )
+    include_trashed: bool = Field(
+        default=False, description="Whether trashed files should be included."
+    )
 
 
 class DriveSearchFilesInput(BaseModel):
@@ -22,28 +29,44 @@ class DriveSearchFilesInput(BaseModel):
     name: str | None = Field(default=None, description="Partial file name to search for.")
     mime_type: str | None = Field(default=None, description="Optional exact mime type filter.")
     parent_id: str | None = Field(default=None, description="Optional parent folder ID filter.")
-    page_size: int = Field(default=20, ge=1, le=100, description="Maximum number of files to return.")
-    page_token: str | None = Field(default=None, description="Pagination token from a previous search response.")
-    include_trashed: bool = Field(default=False, description="Whether trashed files should be included.")
+    page_size: int = Field(
+        default=20, ge=1, le=100, description="Maximum number of files to return."
+    )
+    page_token: str | None = Field(
+        default=None, description="Pagination token from a previous search response."
+    )
+    include_trashed: bool = Field(
+        default=False, description="Whether trashed files should be included."
+    )
 
 
 class DriveFindByNameInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, description="Target Drive file or folder name.")
-    exact: bool = Field(default=False, description="Whether to prioritize exact name matches first.")
+    exact: bool = Field(
+        default=False, description="Whether to prioritize exact name matches first."
+    )
     normalized: bool = Field(
         default=True,
         description="Whether to compare normalized names locally using lowercase, trimmed, accent-free text.",
     )
-    include_trashed: bool = Field(default=False, description="Whether trashed files should be included.")
+    include_trashed: bool = Field(
+        default=False, description="Whether trashed files should be included."
+    )
     parent_id: str | None = Field(default=None, description="Optional parent folder ID filter.")
-    max_results: int = Field(default=20, ge=1, le=100, description="Maximum number of ranked matches to return.")
+    max_results: int = Field(
+        default=20, ge=1, le=100, description="Maximum number of ranked matches to return."
+    )
 
 
 class DriveFindFolderByNameInput(DriveFindByNameInput):
-    exact: bool = Field(default=True, description="Whether to prioritize exact folder name matches first.")
-    max_results: int = Field(default=10, ge=1, le=100, description="Maximum number of ranked matches to return.")
+    exact: bool = Field(
+        default=True, description="Whether to prioritize exact folder name matches first."
+    )
+    max_results: int = Field(
+        default=10, ge=1, le=100, description="Maximum number of ranked matches to return."
+    )
 
 
 class DriveFindFileByNameInput(DriveFindByNameInput):
@@ -57,8 +80,14 @@ class DriveFindFileByNameInput(DriveFindByNameInput):
 class DriveSearchFilesAdvancedInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    terms: list[str] = Field(min_length=1, description="Search terms used to build automatic Drive search strategies.")
-    mime_types: list[str] | None = Field(default=None, description="Optional Drive mime type filters.")
+    terms: list[str] = Field(
+        min_length=1,
+        max_length=8,
+        description="Search terms used to build automatic Drive search strategies.",
+    )
+    mime_types: list[str] | None = Field(
+        default=None, max_length=8, description="Optional Drive mime type filters."
+    )
     match_mode: str = Field(
         default="all_terms",
         pattern="^(all_terms|any_term)$",
@@ -68,17 +97,26 @@ class DriveSearchFilesAdvancedInput(BaseModel):
         default=True,
         description="Whether to compare normalized names locally using lowercase, trimmed, accent-free text.",
     )
-    fuzzy: bool = Field(default=True, description="Whether to use lightweight local fuzzy ranking on candidate names.")
-    include_trashed: bool = Field(default=False, description="Whether trashed files should be included.")
+    fuzzy: bool = Field(
+        default=True,
+        description="Whether to use lightweight local fuzzy ranking on candidate names.",
+    )
+    include_trashed: bool = Field(
+        default=False, description="Whether trashed files should be included."
+    )
     parent_id: str | None = Field(default=None, description="Optional parent folder ID filter.")
-    page_size: int = Field(default=20, ge=1, le=100, description="Maximum number of ranked matches to return.")
+    page_size: int = Field(
+        default=20, ge=1, le=100, description="Maximum number of ranked matches to return."
+    )
 
     @model_validator(mode="after")
-    def validate_terms(self) -> "DriveSearchFilesAdvancedInput":
+    def validate_terms(self) -> DriveSearchFilesAdvancedInput:
         cleaned_terms = [term.strip() for term in self.terms if term.strip()]
         if not cleaned_terms:
             raise ValueError("At least one non-empty search term is required")
-        self.terms = cleaned_terms
+        self.terms = list(dict.fromkeys(cleaned_terms))
+        if self.mime_types is not None:
+            self.mime_types = list(dict.fromkeys(self.mime_types))
         return self
 
 
@@ -98,7 +136,9 @@ class DriveExportFileInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     file_id: str = Field(description="Drive file ID for a Google-native file export.")
-    export_mime_type: str = Field(description="Target mime type for export, such as application/pdf.")
+    export_mime_type: str = Field(
+        description="Target mime type for export, such as application/pdf."
+    )
 
 
 class DriveCreateFolderInput(BaseModel):
@@ -136,7 +176,9 @@ class DrivePrepareWriteGoogleSheetInput(BaseModel):
         default=False,
         description="Whether to create the sheet/tab when `sheet_name` does not already exist.",
     )
-    start_cell: str = Field(default="A1", description="Start cell in A1 notation for overwrite mode.")
+    start_cell: str = Field(
+        default="A1", description="Start cell in A1 notation for overwrite mode."
+    )
     mode: str = Field(default="overwrite", pattern="^(overwrite|append)$")
 
 
@@ -156,7 +198,7 @@ class DriveUpdateMetadataInput(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
-    def validate_changes(self) -> "DriveUpdateMetadataInput":
+    def validate_changes(self) -> DriveUpdateMetadataInput:
         if self.name is None and self.description is None:
             raise ValueError("At least one metadata field must be provided")
         return self
@@ -170,7 +212,7 @@ class DriveMoveFileInput(BaseModel):
     remove_parent_id: str | None = None
 
     @model_validator(mode="after")
-    def validate_move(self) -> "DriveMoveFileInput":
+    def validate_move(self) -> DriveMoveFileInput:
         if self.add_parent_id is None and self.remove_parent_id is None:
             raise ValueError("At least one parent change must be provided")
         return self
@@ -179,12 +221,16 @@ class DriveMoveFileInput(BaseModel):
 class DriveInlineContentInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    content_text: str | None = Field(default=None, description="Inline text content for UTF-8 files.")
-    content_base64: str | None = Field(default=None, description="Base64 content for binary payloads.")
+    content_text: str | None = Field(
+        default=None, description="Inline text content for UTF-8 files."
+    )
+    content_base64: str | None = Field(
+        default=None, description="Base64 content for binary payloads."
+    )
     mime_type: str = Field(description="Mime type for the uploaded or saved content.")
 
     @model_validator(mode="after")
-    def validate_content(self) -> "DriveInlineContentInput":
+    def validate_content(self) -> DriveInlineContentInput:
         if bool(self.content_text) == bool(self.content_base64):
             raise ValueError("Exactly one of content_text or content_base64 is required")
         return self
@@ -209,7 +255,9 @@ class DrivePrepareDeleteFileInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     file_id: str
-    permanent: bool = Field(default=False, description="Whether to permanently delete instead of moving to trash.")
+    permanent: bool = Field(
+        default=False, description="Whether to permanently delete instead of moving to trash."
+    )
 
 
 class DrivePermissionInput(BaseModel):
@@ -222,7 +270,7 @@ class DrivePermissionInput(BaseModel):
     allow_file_discovery: bool | None = None
 
     @model_validator(mode="after")
-    def validate_target(self) -> "DrivePermissionInput":
+    def validate_target(self) -> DrivePermissionInput:
         if self.type in {"user", "group"} and self.email_address is None:
             raise ValueError("email_address is required for user and group permissions")
         if self.type == "domain" and not self.domain:
@@ -274,11 +322,3 @@ class DriveOperationPreview(BaseModel):
 
 def is_google_native_mime_type(mime_type: str | None) -> bool:
     return bool(mime_type and mime_type.startswith(GOOGLE_NATIVE_MIME_PREFIX))
-
-
-def estimate_inline_bytes(content: DriveInlineContentInput) -> int:
-    if content.content_text is not None:
-        return len(content.content_text.encode("utf-8"))
-    if content.content_base64 is not None:
-        return len(content.content_base64.encode("ascii"))
-    return 0

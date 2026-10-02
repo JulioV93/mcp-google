@@ -1,7 +1,7 @@
 from starlette.testclient import TestClient
 
-from app.factory import create_app
 from app.config import Settings
+from app.factory import create_app
 
 
 def test_healthcheck_is_public() -> None:

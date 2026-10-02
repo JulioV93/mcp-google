@@ -11,7 +11,6 @@ from app.config import Settings, get_settings
 from app.db.models import PendingGoogleOperation
 from app.db.repositories.pending_google_operations import PendingGoogleOperationRepository
 from app.errors import (
-    AppError,
     DriveContentTooLargeError,
     DriveExportNotSupportedError,
     DriveNativeEditNotSupportedError,
@@ -35,26 +34,23 @@ from app.schemas.drive import (
     DrivePrepareRevokePermissionInput,
     DrivePrepareSaveFileInput,
     DrivePrepareShareFileInput,
+    DrivePrepareUploadInput,
     DrivePrepareWriteGoogleDocInput,
     DrivePrepareWriteGoogleSheetInput,
-    DrivePrepareUploadInput,
-    DriveSearchFilesInput,
     DriveSearchFilesAdvancedInput,
+    DriveSearchFilesInput,
     DriveUpdateMetadataInput,
-    estimate_inline_bytes,
     is_google_native_mime_type,
 )
 from app.services.connection_service import ConnectionService
 from app.services.pending_operations import (
     _as_str,
-    _generate_operation_key,
     _get_pending_operation_record,
-    _hash_payload,
-    _operation_expiry,
     _preview_from_record,
+    confirmed_operation,
+    create_pending_operation,
 )
 from app.services.response_enrichment import enrich_collection, enrich_resource
-
 
 EXPORT_MIME_TYPES: dict[str, set[str]] = {
     "application/vnd.google-apps.document": {
@@ -111,21 +107,22 @@ class DriveService:
         input_data: DriveListFilesInput,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
-        try:
-            payload = self.client.list_files(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                query=_build_drive_query(parent_id=input_data.parent_id, include_trashed=input_data.include_trashed),
-                page_size=input_data.page_size,
-                page_token=input_data.page_token,
-            )
-        except AppError:
-            raise
+        payload = self.client.list_files(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            query=_build_drive_query(
+                parent_id=input_data.parent_id, include_trashed=input_data.include_trashed
+            ),
+            page_size=input_data.page_size,
+            page_token=input_data.page_token,
+        )
         normalized = _normalize_file_list(payload)
         raw_items = normalized.get("items")
         items = cast(list[dict[str, object]], raw_items) if isinstance(raw_items, list) else []
         next_page_token_raw = normalized.get("next_page_token")
-        next_page_token = cast(str | None, next_page_token_raw if isinstance(next_page_token_raw, str) else None)
+        next_page_token = cast(
+            str | None, next_page_token_raw if isinstance(next_page_token_raw, str) else None
+        )
         return enrich_collection(
             items=items,
             next_page_token=next_page_token,
@@ -150,28 +147,31 @@ class DriveService:
             parent_id=input_data.parent_id,
             include_trashed=input_data.include_trashed,
         )
-        try:
-            payload = self.client.list_files(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                query=query,
-                page_size=input_data.page_size,
-                page_token=input_data.page_token,
-            )
-        except AppError:
-            raise
+        payload = self.client.list_files(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            query=query,
+            page_size=input_data.page_size,
+            page_token=input_data.page_token,
+        )
         normalized = _normalize_file_list(payload)
         raw_items = normalized.get("items")
         items = cast(list[dict[str, object]], raw_items) if isinstance(raw_items, list) else []
         next_page_token_raw = normalized.get("next_page_token")
-        next_page_token = cast(str | None, next_page_token_raw if isinstance(next_page_token_raw, str) else None)
+        next_page_token = cast(
+            str | None, next_page_token_raw if isinstance(next_page_token_raw, str) else None
+        )
         return enrich_collection(
             items=items,
             next_page_token=next_page_token,
             resource_type="drive_file_collection",
             parent_id=input_data.parent_id,
             human_summary=f"Found {len(items)} matching Drive file(s).",
-            next_suggested_actions=["drive_get_file", "drive_download_file", "drive_prepare_share_file"],
+            next_suggested_actions=[
+                "drive_get_file",
+                "drive_download_file",
+                "drive_prepare_share_file",
+            ],
             safety_level="read",
         )
 
@@ -222,6 +222,7 @@ class DriveService:
     ) -> dict[str, object]:
         terms = [term.strip() for term in input_data.terms if term.strip()]
         seen_ids: set[str] = set()
+        queries: set[str | None] = set()
         candidates: list[dict[str, object]] = []
         strategies: list[str] = []
 
@@ -237,6 +238,7 @@ class DriveService:
                     parent_id=input_data.parent_id,
                     page_size=input_data.page_size,
                     seen_ids=seen_ids,
+                    queries=queries,
                     strategy_name="phrase_partial",
                     strategies=strategies,
                 )
@@ -253,6 +255,7 @@ class DriveService:
                     parent_id=input_data.parent_id,
                     page_size=input_data.page_size,
                     seen_ids=seen_ids,
+                    queries=queries,
                     strategy_name=f"term:{term}",
                     strategies=strategies,
                 )
@@ -278,10 +281,15 @@ class DriveService:
                 "include_trashed": input_data.include_trashed,
                 "parent_id": input_data.parent_id,
                 "strategies": strategies,
+                "incomplete": "budget_exhausted" in strategies,
             },
             resource_type="drive_file_collection",
             human_summary=_build_find_summary(matches, label="Drive file"),
-            next_suggested_actions=["drive_get_file", "drive_export_file", "drive_prepare_share_file"],
+            next_suggested_actions=[
+                "drive_get_file",
+                "drive_export_file",
+                "drive_prepare_share_file",
+            ],
         )
 
     def get_file(
@@ -291,21 +299,22 @@ class DriveService:
         input_data: DriveGetFileInput,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
-        try:
-            payload = self.client.get_file(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                file_id=input_data.file_id,
-            )
-        except AppError:
-            raise
+        payload = self.client.get_file(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            file_id=input_data.file_id,
+        )
         normalized = _normalize_file(payload)
         return enrich_resource(
             normalized,
             resource_type="drive_file",
             file_id=normalized.get("id"),
             human_summary=f"Loaded Drive file '{normalized.get('name') or normalized.get('id')}'.",
-            next_suggested_actions=["drive_download_file", "drive_update_metadata", "drive_prepare_share_file"],
+            next_suggested_actions=[
+                "drive_download_file",
+                "drive_update_metadata",
+                "drive_prepare_share_file",
+            ],
             safety_level="read",
         )
 
@@ -316,14 +325,11 @@ class DriveService:
         input_data: DriveListPermissionsInput,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
-        try:
-            payload = self.client.list_permissions(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                file_id=input_data.file_id,
-            )
-        except AppError:
-            raise
+        payload = self.client.list_permissions(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            file_id=input_data.file_id,
+        )
         permission_items_raw = payload.get("permissions")
         permission_items: list[dict[str, object]] = []
         if isinstance(permission_items_raw, list):
@@ -345,7 +351,11 @@ class DriveService:
             resource_type="drive_permission_collection",
             file_id=input_data.file_id,
             human_summary=f"Found {len(items)} permission(s) for Drive file '{input_data.file_id}'.",
-            next_suggested_actions=["drive_prepare_share_file", "drive_prepare_revoke_permission", "drive_get_file"],
+            next_suggested_actions=[
+                "drive_prepare_share_file",
+                "drive_prepare_revoke_permission",
+                "drive_get_file",
+            ],
             safety_level="read",
         )
 
@@ -362,7 +372,17 @@ class DriveService:
             tenant_id=tenant_id,
         )
         if is_google_native_mime_type(_as_str(metadata.get("mime_type"))):
-            raise DriveNativeEditNotSupportedError("Use drive_export_file for native Google Workspace files")
+            raise DriveNativeEditNotSupportedError(
+                "Use drive_export_file for native Google Workspace files"
+            )
+        declared_size = metadata.get("size")
+        if declared_size is not None:
+            try:
+                _ensure_size_limit(
+                    int(declared_size), self.settings.drive_inline_content_limit_bytes
+                )
+            except (ValueError, TypeError):
+                raise ValidationError("Invalid Drive file size") from None
         content = self.client.download_file(
             external_subject=external_subject,
             tenant_id=tenant_id,
@@ -442,7 +462,11 @@ class DriveService:
             resource_type="drive_folder",
             file_id=normalized.get("id"),
             human_summary=f"Created Drive folder '{normalized.get('name') or normalized.get('id')}'.",
-            next_suggested_actions=["drive_list_files", "drive_create_shortcut", "drive_update_metadata"],
+            next_suggested_actions=[
+                "drive_list_files",
+                "drive_create_shortcut",
+                "drive_update_metadata",
+            ],
             safety_level="write",
         )
 
@@ -459,7 +483,11 @@ class DriveService:
             tenant_id=tenant_id,
             native_kind="document",
             summary_label="Google Doc",
-            next_suggested_actions=["drive_get_file", "drive_export_file", "drive_prepare_share_file"],
+            next_suggested_actions=[
+                "drive_get_file",
+                "drive_export_file",
+                "drive_prepare_share_file",
+            ],
         )
 
     def create_google_sheet(
@@ -475,7 +503,11 @@ class DriveService:
             tenant_id=tenant_id,
             native_kind="spreadsheet",
             summary_label="Google Sheet",
-            next_suggested_actions=["drive_get_file", "drive_export_file", "drive_prepare_share_file"],
+            next_suggested_actions=[
+                "drive_get_file",
+                "drive_export_file",
+                "drive_prepare_share_file",
+            ],
         )
 
     def create_google_slide(
@@ -491,7 +523,11 @@ class DriveService:
             tenant_id=tenant_id,
             native_kind="presentation",
             summary_label="Google Slide deck",
-            next_suggested_actions=["drive_get_file", "drive_export_file", "drive_prepare_share_file"],
+            next_suggested_actions=[
+                "drive_get_file",
+                "drive_export_file",
+                "drive_prepare_share_file",
+            ],
         )
 
     def prepare_write_google_doc(
@@ -508,7 +544,9 @@ class DriveService:
         )
         mime_type = _as_str(metadata.get("mime_type"))
         if mime_type != GOOGLE_NATIVE_CREATE_TYPES["document"]:
-            raise DriveNativeEditNotSupportedError("This tool only supports native Google Docs documents")
+            raise DriveNativeEditNotSupportedError(
+                "This tool only supports native Google Docs documents"
+            )
         size = len(input_data.content_text.encode("utf-8"))
         _ensure_size_limit(size, self.settings.drive_inline_content_limit_bytes)
         record = self._create_pending_operation(
@@ -532,6 +570,7 @@ class DriveService:
             },
         )
 
+    @confirmed_operation
     def confirm_write_google_doc(
         self,
         *,
@@ -574,7 +613,11 @@ class DriveService:
             resource_type="drive_file",
             file_id=file_id,
             human_summary=f"Wrote content to Google Doc '{record.resource_name or file_id}'.",
-            next_suggested_actions=["drive_get_file", "drive_export_file", "drive_prepare_share_file"],
+            next_suggested_actions=[
+                "drive_get_file",
+                "drive_export_file",
+                "drive_prepare_share_file",
+            ],
             safety_level="destructive",
         )
 
@@ -592,7 +635,9 @@ class DriveService:
         )
         mime_type = _as_str(metadata.get("mime_type"))
         if mime_type != GOOGLE_NATIVE_CREATE_TYPES["spreadsheet"]:
-            raise DriveNativeEditNotSupportedError("This tool only supports native Google Sheets spreadsheets")
+            raise DriveNativeEditNotSupportedError(
+                "This tool only supports native Google Sheets spreadsheets"
+            )
         serialized_values = str(input_data.values)
         size = len(serialized_values.encode("utf-8"))
         _ensure_size_limit(size, self.settings.drive_inline_content_limit_bytes)
@@ -623,6 +668,7 @@ class DriveService:
             },
         )
 
+    @confirmed_operation
     def confirm_write_google_sheet(
         self,
         *,
@@ -645,7 +691,12 @@ class DriveService:
         for row in values:
             if not isinstance(row, list):
                 raise ValidationError("Pending sheet row payload is invalid")
-            normalized_values.append([cell if isinstance(cell, (str, int, float, bool)) or cell is None else str(cell) for cell in row])
+            normalized_values.append(
+                [
+                    cell if isinstance(cell, (str, int, float, bool)) or cell is None else str(cell)
+                    for cell in row
+                ]
+            )
         mode = _as_str(payload.get("mode"))
         start_cell = _as_str(payload.get("start_cell"))
         sheet_name = _nullable_str(payload.get("sheet_name"))
@@ -681,7 +732,11 @@ class DriveService:
             resource_type="drive_file",
             file_id=file_id,
             human_summary=f"Wrote values to Google Sheet '{record.resource_name or file_id}'.",
-            next_suggested_actions=["drive_get_file", "drive_export_file", "drive_prepare_share_file"],
+            next_suggested_actions=[
+                "drive_get_file",
+                "drive_export_file",
+                "drive_prepare_share_file",
+            ],
             safety_level="destructive",
         )
 
@@ -705,7 +760,11 @@ class DriveService:
             resource_type="drive_shortcut",
             file_id=normalized.get("id"),
             human_summary=f"Created Drive shortcut '{normalized.get('name') or normalized.get('id')}'.",
-            next_suggested_actions=["drive_get_file", "drive_move_file", "drive_prepare_delete_file"],
+            next_suggested_actions=[
+                "drive_get_file",
+                "drive_move_file",
+                "drive_prepare_delete_file",
+            ],
             safety_level="write",
         )
 
@@ -752,6 +811,7 @@ class DriveService:
     ) -> dict[str, object]:
         mime_types = FILE_TYPE_TO_MIME_TYPES[file_type]
         seen_ids: set[str] = set()
+        queries: set[str | None] = set()
         candidates: list[dict[str, object]] = []
         strategies: list[str] = []
         normalized_name = _normalize_match_text(name)
@@ -767,6 +827,7 @@ class DriveService:
                     parent_id=parent_id,
                     page_size=max_results,
                     seen_ids=seen_ids,
+                    queries=queries,
                     strategy_name="exact_original",
                     strategies=strategies,
                 )
@@ -782,6 +843,7 @@ class DriveService:
                     parent_id=parent_id,
                     page_size=max_results,
                     seen_ids=seen_ids,
+                    queries=queries,
                     strategy_name="exact_normalized_candidate",
                     strategies=strategies,
                 )
@@ -797,6 +859,7 @@ class DriveService:
                     parent_id=parent_id,
                     page_size=max_results,
                     seen_ids=seen_ids,
+                    queries=queries,
                     strategy_name="partial_original",
                     strategies=strategies,
                 )
@@ -813,6 +876,7 @@ class DriveService:
                         parent_id=parent_id,
                         page_size=max_results,
                         seen_ids=seen_ids,
+                        queries=queries,
                         strategy_name=f"token:{token}",
                         strategies=strategies,
                     )
@@ -839,10 +903,17 @@ class DriveService:
                 "include_trashed": include_trashed,
                 "parent_id": parent_id,
                 "strategies": strategies,
+                "incomplete": "budget_exhausted" in strategies,
             },
             resource_type="drive_file_collection",
-            human_summary=_build_find_summary(matches, label="Drive file" if file_type != "folder" else "Drive folder"),
-            next_suggested_actions=["drive_get_file", "drive_export_file", "drive_prepare_share_file"],
+            human_summary=_build_find_summary(
+                matches, label="Drive file" if file_type != "folder" else "Drive folder"
+            ),
+            next_suggested_actions=[
+                "drive_get_file",
+                "drive_export_file",
+                "drive_prepare_share_file",
+            ],
         )
 
     def _collect_drive_candidates(
@@ -851,6 +922,7 @@ class DriveService:
         external_subject: str,
         tenant_id: str | None,
         seen_ids: set[str],
+        queries: set[str | None],
         strategy_name: str,
         strategies: list[str],
         page_size: int,
@@ -871,6 +943,13 @@ class DriveService:
                 parent_id=parent_id,
                 include_trashed=include_trashed,
             )
+            if query in queries:
+                continue
+            if len(queries) >= 16:
+                if "budget_exhausted" not in strategies:
+                    strategies.append("budget_exhausted")
+                break
+            queries.add(query)
             payload = self.client.list_files(
                 external_subject=external_subject,
                 tenant_id=tenant_id,
@@ -970,7 +1049,11 @@ class DriveService:
             resource_type="drive_file",
             file_id=normalized.get("id"),
             human_summary=f"Updated metadata for Drive file '{normalized.get('name') or normalized.get('id')}'.",
-            next_suggested_actions=["drive_get_file", "drive_move_file", "drive_prepare_share_file"],
+            next_suggested_actions=[
+                "drive_get_file",
+                "drive_move_file",
+                "drive_prepare_share_file",
+            ],
             safety_level="write",
         )
 
@@ -994,7 +1077,11 @@ class DriveService:
             resource_type="drive_file",
             file_id=normalized.get("id"),
             human_summary=f"Moved Drive file '{normalized.get('name') or normalized.get('id')}'.",
-            next_suggested_actions=["drive_get_file", "drive_list_files", "drive_prepare_share_file"],
+            next_suggested_actions=[
+                "drive_get_file",
+                "drive_list_files",
+                "drive_prepare_share_file",
+            ],
             safety_level="write",
         )
 
@@ -1005,7 +1092,10 @@ class DriveService:
         input_data: DrivePrepareUploadInput,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
-        size = estimate_inline_bytes(input_data.content)
+        content_bytes, _ = _decode_content_payload(
+            input_data.content.model_dump(), self.settings.drive_inline_content_limit_bytes
+        )
+        size = len(content_bytes)
         _ensure_size_limit(size, self.settings.drive_inline_content_limit_bytes)
         record = self._create_pending_operation(
             external_subject=external_subject,
@@ -1027,6 +1117,7 @@ class DriveService:
             },
         )
 
+    @confirmed_operation
     def confirm_upload(
         self,
         *,
@@ -1041,7 +1132,9 @@ class DriveService:
             expected_operation_type="drive_upload",
         )
         payload = record.payload_normalized
-        content_bytes, mime_type = _decode_content_payload(payload.get("content", {}))
+        content_bytes, mime_type = _decode_content_payload(
+            payload.get("content", {}), self.settings.drive_inline_content_limit_bytes
+        )
         result = self.client.upload_file(
             external_subject=external_subject,
             tenant_id=tenant_id,
@@ -1063,7 +1156,11 @@ class DriveService:
             resource_type="drive_file",
             file_id=file_payload.get("id") if isinstance(file_payload, dict) else None,
             human_summary=f"Uploaded Drive file '{record.resource_name or 'file'}'.",
-            next_suggested_actions=["drive_get_file", "drive_prepare_share_file", "drive_prepare_delete_file"],
+            next_suggested_actions=[
+                "drive_get_file",
+                "drive_prepare_share_file",
+                "drive_prepare_delete_file",
+            ],
             safety_level="destructive",
         )
 
@@ -1082,7 +1179,10 @@ class DriveService:
         mime_type = _as_str(metadata.get("mime_type"))
         if is_google_native_mime_type(mime_type):
             raise DriveNativeEditNotSupportedError()
-        size = estimate_inline_bytes(input_data.content)
+        content_bytes, _ = _decode_content_payload(
+            input_data.content.model_dump(), self.settings.drive_inline_content_limit_bytes
+        )
+        size = len(content_bytes)
         _ensure_size_limit(size, self.settings.drive_inline_content_limit_bytes)
         record = self._create_pending_operation(
             external_subject=external_subject,
@@ -1105,6 +1205,7 @@ class DriveService:
             },
         )
 
+    @confirmed_operation
     def confirm_save_file(
         self,
         *,
@@ -1127,7 +1228,9 @@ class DriveService:
         )
         if is_google_native_mime_type(_as_str(metadata.get("mime_type"))):
             raise DriveNativeEditNotSupportedError()
-        content_bytes, mime_type = _decode_content_payload(payload.get("content", {}))
+        content_bytes, mime_type = _decode_content_payload(
+            payload.get("content", {}), self.settings.drive_inline_content_limit_bytes
+        )
         result = self.client.update_file_content(
             external_subject=external_subject,
             tenant_id=tenant_id,
@@ -1148,7 +1251,11 @@ class DriveService:
             resource_type="drive_file",
             file_id=file_payload.get("id") if isinstance(file_payload, dict) else None,
             human_summary=f"Saved content to Drive file '{record.resource_name or file_id}'.",
-            next_suggested_actions=["drive_get_file", "drive_download_file", "drive_prepare_delete_file"],
+            next_suggested_actions=[
+                "drive_get_file",
+                "drive_download_file",
+                "drive_prepare_delete_file",
+            ],
             safety_level="destructive",
         )
 
@@ -1184,6 +1291,7 @@ class DriveService:
             },
         )
 
+    @confirmed_operation
     def confirm_delete_file(
         self,
         *,
@@ -1262,6 +1370,7 @@ class DriveService:
             },
         )
 
+    @confirmed_operation
     def confirm_share_file(
         self,
         *,
@@ -1299,7 +1408,11 @@ class DriveService:
             resource_type="drive_permission",
             file_id=file_id,
             human_summary=f"Shared Drive file '{record.resource_name or file_id}'.",
-            next_suggested_actions=["drive_list_permissions", "drive_prepare_revoke_permission", "drive_get_file"],
+            next_suggested_actions=[
+                "drive_list_permissions",
+                "drive_prepare_revoke_permission",
+                "drive_get_file",
+            ],
             safety_level="destructive",
         )
 
@@ -1335,6 +1448,7 @@ class DriveService:
             },
         )
 
+    @confirmed_operation
     def confirm_revoke_permission(
         self,
         *,
@@ -1372,7 +1486,11 @@ class DriveService:
             file_id=file_id,
             permission_id=permission_id,
             human_summary=f"Revoked Drive permission '{permission_id}' from '{record.resource_name or file_id}'.",
-            next_suggested_actions=["drive_list_permissions", "drive_prepare_share_file", "drive_get_file"],
+            next_suggested_actions=[
+                "drive_list_permissions",
+                "drive_prepare_share_file",
+                "drive_get_file",
+            ],
             safety_level="destructive",
         )
 
@@ -1387,21 +1505,16 @@ class DriveService:
         resource_id: str | None = None,
         resource_name: str | None = None,
     ) -> PendingGoogleOperation:
-        user = self.connections.get_or_create_user(external_subject=external_subject, tenant_id=tenant_id)
-        record = self.pending_operations.create(
-            user_id=user.id,
-            provider="google",
-            operation_key=_generate_operation_key(),
+        return create_pending_operation(
+            self,
+            external_subject=external_subject,
+            tenant_id=tenant_id,
             operation_type=operation_type,
             resource_type=resource_type,
+            payload_normalized=payload_normalized,
             resource_id=resource_id,
             resource_name=resource_name,
-            payload_normalized=payload_normalized,
-            payload_hash=_hash_payload(payload_normalized),
-            expires_at=_operation_expiry(self.settings.drive_confirmation_ttl_seconds),
         )
-        self.session.commit()
-        return record
 
     def _get_pending_operation(
         self,
@@ -1446,7 +1559,9 @@ def _normalize_file(payload: dict[str, object]) -> dict[str, object]:
                         "email_address": owner.get("emailAddress"),
                     }
                 )
-    shortcut_details = payload.get("shortcutDetails") if isinstance(payload.get("shortcutDetails"), dict) else {}
+    shortcut_details = (
+        payload.get("shortcutDetails") if isinstance(payload.get("shortcutDetails"), dict) else {}
+    )
     return {
         "id": payload.get("id"),
         "name": payload.get("name"),
@@ -1461,7 +1576,9 @@ def _normalize_file(payload: dict[str, object]) -> dict[str, object]:
         "created_time": payload.get("createdTime"),
         "modified_time": payload.get("modifiedTime"),
         "owners": owner_items,
-        "shortcut_target_id": shortcut_details.get("targetId") if isinstance(shortcut_details, dict) else None,
+        "shortcut_target_id": shortcut_details.get("targetId")
+        if isinstance(shortcut_details, dict)
+        else None,
     }
 
 
@@ -1503,17 +1620,23 @@ def _build_drive_query(
     return " and ".join(parts) if parts else None
 
 
-def _decode_content_payload(payload: object) -> tuple[bytes, str]:
+def _decode_content_payload(payload: object, limit: int = 262144) -> tuple[bytes, str]:
     if not isinstance(payload, dict):
         raise ValidationError("Drive content payload is invalid")
     mime_type = _as_str(payload.get("mime_type"))
     content_text = payload.get("content_text")
     content_base64 = payload.get("content_base64")
     if isinstance(content_text, str):
-        return content_text.encode("utf-8"), mime_type
+        _ensure_size_limit(len(content_text), limit)
+        content = content_text.encode("utf-8")
+        _ensure_size_limit(len(content), limit)
+        return content, mime_type
     if isinstance(content_base64, str):
         try:
-            return base64.b64decode(content_base64), mime_type
+            _ensure_size_limit(len(content_base64), 4 * ((limit + 2) // 3))
+            content = base64.b64decode(content_base64, validate=True)
+            _ensure_size_limit(len(content), limit)
+            return content, mime_type
         except ValueError as exc:
             raise ValidationError("Drive base64 content is invalid") from exc
     raise ValidationError("Drive content payload is missing inline content")
@@ -1565,7 +1688,9 @@ def _score_drive_match(
     candidate_name_normalized = _normalize_match_text(candidate_name)
     target_name_normalized = _normalize_match_text(target_name)
     candidate_terms = set(_tokenize_match_text(candidate_name))
-    required_normalized = [_normalize_match_text(term) for term in required_terms if _normalize_match_text(term)]
+    required_normalized = [
+        _normalize_match_text(term) for term in required_terms if _normalize_match_text(term)
+    ]
     if required_normalized and not all(term in candidate_terms for term in required_normalized):
         return None
 
@@ -1574,21 +1699,29 @@ def _score_drive_match(
     if candidate_name == target_name and target_name:
         match_type = "exact"
         score = 1.0
-    elif normalized and candidate_name_normalized == target_name_normalized and target_name_normalized:
+    elif (
+        normalized
+        and candidate_name_normalized == target_name_normalized
+        and target_name_normalized
+    ):
         match_type = "exact_normalized"
         score = 0.96
     elif target_name_normalized and target_name_normalized in candidate_name_normalized:
         match_type = "partial"
         score = 0.88
     else:
-        preferred_normalized = [_normalize_match_text(term) for term in preferred_terms if _normalize_match_text(term)]
+        preferred_normalized = [
+            _normalize_match_text(term) for term in preferred_terms if _normalize_match_text(term)
+        ]
         matched_terms = sum(1 for term in preferred_normalized if term in candidate_terms)
         if preferred_normalized and matched_terms:
             coverage = matched_terms / len(preferred_normalized)
             score = max(score, 0.7 + (coverage * 0.15))
             match_type = "partial"
         if allow_fuzzy and target_name_normalized and candidate_name_normalized:
-            fuzzy_score = SequenceMatcher(None, candidate_name_normalized, target_name_normalized).ratio()
+            fuzzy_score = SequenceMatcher(
+                None, candidate_name_normalized, target_name_normalized
+            ).ratio()
             if fuzzy_score >= 0.72:
                 score = max(score, round(min(0.84, fuzzy_score), 4))
                 if score < 0.85:

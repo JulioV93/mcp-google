@@ -21,13 +21,15 @@ class TaskInput(BaseModel):
     title: str = Field(min_length=1, description="Human-readable task title.")
     notes: str | None = Field(default=None, description="Optional task notes.")
     due: str | None = Field(default=None, description="Optional RFC3339 due date-time.")
-    status: str | None = Field(default=None, description="Google Tasks status such as needsAction or completed.")
+    status: str | None = Field(
+        default=None, description="Google Tasks status such as needsAction or completed."
+    )
 
 
 class TasksListTasklistsInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    max_results: int = 100
+    max_results: int = Field(default=100, ge=1, le=100)
     page_token: str | None = None
 
 
@@ -52,7 +54,7 @@ class TasksConfirmDeleteTasklistInput(BaseModel):
 class TasksListTasksInput(TaskListRefInput):
     model_config = ConfigDict(extra="forbid")
 
-    max_results: int = 100
+    max_results: int = Field(default=100, ge=1, le=100)
     page_token: str | None = None
     show_completed: bool = True
     show_hidden: bool = False
@@ -75,7 +77,9 @@ class TasksCompleteTaskInput(TaskListRefInput):
     model_config = ConfigDict(extra="forbid")
 
     task_id: str = Field(min_length=1, description="Task ID to mark as completed.")
-    completed: str | None = Field(default=None, description="Optional RFC3339 completion timestamp.")
+    completed: str | None = Field(
+        default=None, description="Optional RFC3339 completion timestamp."
+    )
 
 
 class TasksDeleteTaskInput(TaskListRefInput):

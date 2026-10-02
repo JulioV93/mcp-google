@@ -5,7 +5,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from app.config import Settings
-from app.oauth.google_oauth import GOOGLE_AUTH_URI, allow_insecure_transport_for_local_dev, exchange_code
+from app.oauth.google_oauth import (
+    GOOGLE_AUTH_URI,
+    allow_insecure_transport_for_local_dev,
+    exchange_code,
+)
 
 
 def test_google_auth_uri_uses_v2_endpoint() -> None:
@@ -34,6 +38,7 @@ def test_exchange_code_prefers_authorization_response_and_includes_client_id() -
     flow.fetch_token.assert_called_once_with(
         authorization_response="http://localhost:8000/oauth/google/callback?code=abc&state=xyz",
         include_client_id=True,
+        timeout=30,
     )
     assert result.access_token == "access-token"
     assert result.refresh_token == "refresh-token"

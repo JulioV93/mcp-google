@@ -2,19 +2,17 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import cast
-from unittest.mock import Mock
 
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db.models import PendingGoogleOperation
 from app.db.repositories.pending_google_operations import PendingGoogleOperationRepository
-from app.errors import AppError
 from app.google.tasks_client import TasksClient
 from app.schemas.tasks import (
+    TasksCompleteTaskInput,
     TasksConfirmDeleteTaskInput,
     TasksConfirmDeleteTasklistInput,
-    TasksCompleteTaskInput,
     TasksCreateTaskInput,
     TasksCreateTasklistInput,
     TasksDeleteTaskInput,
@@ -27,11 +25,10 @@ from app.schemas.tasks import (
 from app.services.connection_service import ConnectionService
 from app.services.pending_operations import (
     _as_str,
-    _generate_operation_key,
     _get_pending_operation_record,
-    _hash_payload,
-    _operation_expiry,
     _preview_from_record,
+    confirmed_operation,
+    create_pending_operation,
 )
 from app.services.response_enrichment import enrich_collection, enrich_resource
 
@@ -40,7 +37,7 @@ class TasksService:
     def __init__(self, session: Session, settings: Settings | None = None) -> None:
         self.session = session
         self.settings = settings or get_settings()
-        self.client = TasksClient(session)
+        self.client = TasksClient(session, self.settings)
         self.connections = ConnectionService(session)
         self.pending_operations = PendingGoogleOperationRepository(session)
 
@@ -51,17 +48,17 @@ class TasksService:
         input_data: TasksListTasklistsInput,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
-        try:
-            payload = self.client.list_tasklists(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                max_results=input_data.max_results,
-                page_token=input_data.page_token,
-            )
-        except AppError:
-            raise
+        payload = self.client.list_tasklists(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            max_results=input_data.max_results,
+            page_token=input_data.page_token,
+        )
 
-        items = [_normalize_tasklist(item) for item in cast(list[dict[str, object]], payload.get("items") or [])]
+        items = [
+            _normalize_tasklist(item)
+            for item in cast(list[dict[str, object]], payload.get("items") or [])
+        ]
         next_page_token_raw = payload.get("nextPageToken")
         next_page_token = next_page_token_raw if isinstance(next_page_token_raw, str) else None
         return enrich_collection(
@@ -69,7 +66,11 @@ class TasksService:
             next_page_token=next_page_token,
             resource_type="tasklist_collection",
             human_summary=f"Found {len(items)} task list(s).",
-            next_suggested_actions=["tasks_create_tasklist", "tasks_list_tasks", "tasks_update_tasklist"],
+            next_suggested_actions=[
+                "tasks_create_tasklist",
+                "tasks_list_tasks",
+                "tasks_update_tasklist",
+            ],
             safety_level="read",
         )
 
@@ -80,21 +81,22 @@ class TasksService:
         input_data: TasksCreateTasklistInput,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
-        try:
-            payload = self.client.create_tasklist(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                title=input_data.title,
-            )
-        except AppError:
-            raise
+        payload = self.client.create_tasklist(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            title=input_data.title,
+        )
         normalized = _normalize_tasklist(payload)
         return enrich_resource(
             normalized,
             resource_type="tasklist",
             tasklist_id=normalized.get("id"),
             human_summary=f"Created task list '{normalized.get('title') or normalized.get('id')}'.",
-            next_suggested_actions=["tasks_list_tasks", "tasks_update_tasklist", "tasks_delete_tasklist"],
+            next_suggested_actions=[
+                "tasks_list_tasks",
+                "tasks_update_tasklist",
+                "tasks_delete_tasklist",
+            ],
             safety_level="write",
         )
 
@@ -105,22 +107,23 @@ class TasksService:
         input_data: TasksUpdateTasklistInput,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
-        try:
-            payload = self.client.update_tasklist(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                tasklist_id=input_data.tasklist_id,
-                title=input_data.title,
-            )
-        except AppError:
-            raise
+        payload = self.client.update_tasklist(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            tasklist_id=input_data.tasklist_id,
+            title=input_data.title,
+        )
         normalized = _normalize_tasklist(payload)
         return enrich_resource(
             normalized,
             resource_type="tasklist",
             tasklist_id=normalized.get("id"),
             human_summary=f"Updated task list '{normalized.get('title') or normalized.get('id')}'.",
-            next_suggested_actions=["tasks_list_tasks", "tasks_create_task", "tasks_delete_tasklist"],
+            next_suggested_actions=[
+                "tasks_list_tasks",
+                "tasks_create_task",
+                "tasks_delete_tasklist",
+            ],
             safety_level="write",
         )
 
@@ -177,18 +180,15 @@ class TasksService:
         input_data: TasksListTasksInput,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
-        try:
-            payload = self.client.list_tasks(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                tasklist_id=input_data.tasklist_id,
-                max_results=input_data.max_results,
-                page_token=input_data.page_token,
-                show_completed=input_data.show_completed,
-                show_hidden=input_data.show_hidden,
-            )
-        except AppError:
-            raise
+        payload = self.client.list_tasks(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            tasklist_id=input_data.tasklist_id,
+            max_results=input_data.max_results,
+            page_token=input_data.page_token,
+            show_completed=input_data.show_completed,
+            show_hidden=input_data.show_hidden,
+        )
 
         items = [
             _normalize_task(item, input_data.tasklist_id)
@@ -202,7 +202,11 @@ class TasksService:
             resource_type="task_collection",
             tasklist_id=input_data.tasklist_id,
             human_summary=f"Found {len(items)} task(s) in task list '{input_data.tasklist_id}'.",
-            next_suggested_actions=["tasks_create_task", "tasks_update_task", "tasks_complete_task"],
+            next_suggested_actions=[
+                "tasks_create_task",
+                "tasks_update_task",
+                "tasks_complete_task",
+            ],
             safety_level="read",
         )
 
@@ -213,15 +217,12 @@ class TasksService:
         input_data: TasksCreateTaskInput,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
-        try:
-            payload = self.client.create_task(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                tasklist_id=input_data.tasklist_id,
-                task_body=input_data.task.model_dump(exclude_none=True),
-            )
-        except AppError:
-            raise
+        payload = self.client.create_task(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            tasklist_id=input_data.tasklist_id,
+            task_body=input_data.task.model_dump(exclude_none=True),
+        )
         normalized = _normalize_task(payload, input_data.tasklist_id)
         return enrich_resource(
             normalized,
@@ -229,7 +230,11 @@ class TasksService:
             tasklist_id=input_data.tasklist_id,
             task_id=normalized.get("id"),
             human_summary=f"Created task '{normalized.get('title') or normalized.get('id')}'.",
-            next_suggested_actions=["tasks_update_task", "tasks_complete_task", "tasks_delete_task"],
+            next_suggested_actions=[
+                "tasks_update_task",
+                "tasks_complete_task",
+                "tasks_delete_task",
+            ],
             safety_level="write",
         )
 
@@ -240,16 +245,13 @@ class TasksService:
         input_data: TasksUpdateTaskInput,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
-        try:
-            payload = self.client.update_task(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                tasklist_id=input_data.tasklist_id,
-                task_id=input_data.task_id,
-                task_body=input_data.task.model_dump(exclude_none=True),
-            )
-        except AppError:
-            raise
+        payload = self.client.update_task(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            tasklist_id=input_data.tasklist_id,
+            task_id=input_data.task_id,
+            task_body=input_data.task.model_dump(exclude_none=True),
+        )
         normalized = _normalize_task(payload, input_data.tasklist_id)
         return enrich_resource(
             normalized,
@@ -268,17 +270,16 @@ class TasksService:
         input_data: TasksCompleteTaskInput,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
-        completed = input_data.completed or datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-        try:
-            payload = self.client.update_task(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                tasklist_id=input_data.tasklist_id,
-                task_id=input_data.task_id,
-                task_body={"status": "completed", "completed": completed},
-            )
-        except AppError:
-            raise
+        completed = input_data.completed or datetime.now(UTC).replace(
+            microsecond=0
+        ).isoformat().replace("+00:00", "Z")
+        payload = self.client.update_task(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            tasklist_id=input_data.tasklist_id,
+            task_id=input_data.task_id,
+            task_body={"status": "completed", "completed": completed},
+        )
         normalized = _normalize_task(payload, input_data.tasklist_id)
         return enrich_resource(
             normalized,
@@ -313,7 +314,10 @@ class TasksService:
             resource_type="task",
             resource_id=input_data.task_id,
             resource_name=_nullable_str(metadata.get("title")),
-            payload_normalized={"tasklist_id": input_data.tasklist_id, "task_id": input_data.task_id},
+            payload_normalized={
+                "tasklist_id": input_data.tasklist_id,
+                "task_id": input_data.task_id,
+            },
         )
         return _preview_from_record(
             record,
@@ -340,6 +344,7 @@ class TasksService:
             tenant_id=tenant_id,
         )
 
+    @confirmed_operation
     def confirm_delete_tasklist(
         self,
         *,
@@ -376,6 +381,7 @@ class TasksService:
             safety_level="destructive",
         )
 
+    @confirmed_operation
     def confirm_delete_task(
         self,
         *,
@@ -427,21 +433,16 @@ class TasksService:
         resource_id: str | None = None,
         resource_name: str | None = None,
     ) -> PendingGoogleOperation:
-        user = self.connections.get_or_create_user(external_subject=external_subject, tenant_id=tenant_id)
-        record = self.pending_operations.create(
-            user_id=user.id,
-            provider="google",
-            operation_key=_generate_operation_key(),
+        return create_pending_operation(
+            self,
+            external_subject=external_subject,
+            tenant_id=tenant_id,
             operation_type=operation_type,
             resource_type=resource_type,
+            payload_normalized=payload_normalized,
             resource_id=resource_id,
             resource_name=resource_name,
-            payload_normalized=payload_normalized,
-            payload_hash=_hash_payload(payload_normalized),
-            expires_at=_operation_expiry(self.settings.drive_confirmation_ttl_seconds),
         )
-        self.session.commit()
-        return record
 
     def _get_pending_operation(
         self,
@@ -451,8 +452,6 @@ class TasksService:
         operation_id: str,
         expected_operation_type: str,
     ) -> PendingGoogleOperation:
-        if isinstance(self.session, Mock):
-            return cast(PendingGoogleOperation, self.pending_operations.get_by_operation_key(operation_id))
         return _get_pending_operation_record(
             session=self.session,
             connections=self.connections,

@@ -23,9 +23,13 @@ from app.services.calendar_service import CalendarService
 
 
 def create_test_session() -> Session:
-    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:", future=True, connect_args={"check_same_thread": False}
+    )
     Base.metadata.create_all(engine)
-    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, expire_on_commit=False
+    )
     return session_factory()
 
 
@@ -61,7 +65,10 @@ def test_list_events_normalizes_payload() -> None:
     reminders = cast(dict[str, object], first_event["reminders"])
 
     assert result["next_page_token"] == "next-123"
-    assert result["resource_identity"] == {"type": "calendar_event_collection", "calendar_id": "primary"}
+    assert result["resource_identity"] == {
+        "type": "calendar_event_collection",
+        "calendar_id": "primary",
+    }
     assert result["safety_level"] == "read"
     assert first_event["id"] == "evt-1"
     assert first_event["calendar_id"] == "primary"

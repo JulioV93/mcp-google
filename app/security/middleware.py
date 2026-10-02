@@ -1,15 +1,19 @@
 import logging
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import HTTPConnection
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.config import get_settings
 from app.context.request_context import reset_request_context, set_request_context
-from app.errors import OriginNotAllowedError, RateLimitedError, UnauthorizedError
-from app.security.jwt_auth import JWTAuthenticationError, authenticate_request
+from app.errors import AppError, OriginNotAllowedError, RateLimitedError, UnauthorizedError
+from app.security.jwt_auth import (
+    JWTAuthenticationError,
+    JWTProviderUnavailableError,
+    authenticate_request,
+)
 from app.security.rate_limit import InMemoryRateLimiter, RateLimitExceededError
-
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +44,7 @@ class JWTAuthMiddleware:
             return
 
         try:
-            principal = authenticate_request(conn, self.settings)
+            principal = await run_in_threadpool(authenticate_request, conn, self.settings)
         except JWTAuthenticationError as exc:
             logger.info("Rejected MCP request: %s", exc)
             error = UnauthorizedError(str(exc))
@@ -48,9 +52,22 @@ class JWTAuthMiddleware:
             await response(scope, receive, send)
             return
 
+        except JWTProviderUnavailableError:
+            error = AppError(
+                "auth_provider_unavailable",
+                "JWT key provider is unavailable",
+                status_code=503,
+                retryable=True,
+                category="auth",
+            )
+            await JSONResponse(error.to_dict(), status_code=503)(scope, receive, send)
+            return
+
         if self.settings.rate_limit_enabled:
             try:
-                self.rate_limiter.check(principal.context.subject)
+                self.rate_limiter.check(
+                    (principal.context.tenant_id or "", principal.context.subject)
+                )
             except RateLimitExceededError as exc:
                 error = RateLimitedError(str(exc))
                 response = JSONResponse(error.to_dict(), status_code=error.status_code)
@@ -83,3 +100,58 @@ class JWTAuthMiddleware:
             return
         if origin not in self.settings.allowed_origin_list:
             raise OriginNotAllowedError(f"Origin '{origin}' is not allowed")
+
+
+class MCPBodyLimitMiddleware:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+        settings = get_settings()
+        self.limit = settings.mcp_body_limit_bytes
+        self.path = settings.mcp_path
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if (
+            scope["type"] != "http"
+            or not scope.get("path", "").startswith(self.path)
+            or scope.get("method") not in {"POST", "PUT", "PATCH"}
+        ):
+            await self.app(scope, receive, send)
+            return
+        connection = HTTPConnection(scope)
+        length = connection.headers.get("content-length")
+        try:
+            if length is not None and int(length) < 0:
+                raise ValueError
+            oversized = length is not None and int(length) > self.limit
+        except ValueError:
+            await JSONResponse({"error": "invalid_content_length"}, status_code=400)(
+                scope, receive, send
+            )
+            return
+        body = bytearray()
+        while not oversized:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            chunk = message.get("body", b"")
+            if len(body) + len(chunk) > self.limit:
+                oversized = True
+                break
+            body.extend(chunk)
+            if not message.get("more_body", False):
+                break
+        if oversized:
+            await JSONResponse({"error": "request_body_too_large"}, status_code=413)(
+                scope, receive, send
+            )
+            return
+        delivered = False
+
+        async def replay():
+            nonlocal delivered
+            if delivered:
+                return await receive()
+            delivered = True
+            return {"type": "http.request", "body": bytes(body), "more_body": False}
+
+        await self.app(scope, replay, send)

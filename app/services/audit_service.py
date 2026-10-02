@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy.orm import Session
 
 from app.db.repositories.audit_logs import AuditLogRepository
 from app.db.repositories.users import UserRepository
-from app.logging import redact_value
+from app.logging import audit_arguments
 
 
 class AuditService:
@@ -31,8 +33,17 @@ class AuditService:
             tool_name=tool_name,
             provider=provider,
             resource_type=resource_type,
-            arguments_redacted=redact_value(arguments),
+            arguments_redacted=audit_arguments(arguments),
             result_status=result_status,
             error_code=error_code,
         )
         self.session.commit()
+
+    def safe_record_tool_call(self, **kwargs) -> None:
+        try:
+            self.record_tool_call(**kwargs)
+        except Exception:  # noqa: BLE001 - boundary prevents leakage or repetition of external writes
+            self.session.rollback()
+            logging.getLogger(__name__).error(
+                "Audit persistence failed (%s)", kwargs.get("tool_name")
+            )

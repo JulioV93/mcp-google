@@ -4,7 +4,9 @@ from typing import cast
 
 from sqlalchemy.orm import Session
 
-from app.errors import AppError
+from app.config import Settings, get_settings
+from app.db.models import PendingGoogleOperation
+from app.db.repositories.pending_google_operations import PendingGoogleOperationRepository
 from app.google.gmail_client import GmailClient, build_raw_message
 from app.schemas.gmail import (
     GmailConfirmSendEmailInput,
@@ -17,16 +19,12 @@ from app.schemas.gmail import (
     GmailSendEmailInput,
     GmailUpdateDraftInput,
 )
-from app.config import Settings, get_settings
-from app.db.models import PendingGoogleOperation
-from app.db.repositories.pending_google_operations import PendingGoogleOperationRepository
 from app.services.connection_service import ConnectionService
 from app.services.pending_operations import (
-    _generate_operation_key,
     _get_pending_operation_record,
-    _hash_payload,
-    _operation_expiry,
     _preview_from_record,
+    confirmed_operation,
+    create_pending_operation,
 )
 from app.services.response_enrichment import enrich_collection, enrich_resource
 
@@ -35,7 +33,7 @@ class GmailService:
     def __init__(self, session: Session, settings: Settings | None = None) -> None:
         self.session = session
         self.settings = settings or get_settings()
-        self.client = GmailClient(session)
+        self.client = GmailClient(session, self.settings)
         self.connections = ConnectionService(session)
         self.pending_operations = PendingGoogleOperationRepository(session)
 
@@ -46,16 +44,13 @@ class GmailService:
         input_data: GmailListMessagesInput,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
-        try:
-            payload = self.client.list_messages(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                query=input_data.query,
-                max_results=input_data.max_results,
-                page_token=input_data.page_token,
-            )
-        except AppError:
-            raise
+        payload = self.client.list_messages(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            query=input_data.query,
+            max_results=input_data.max_results,
+            page_token=input_data.page_token,
+        )
 
         raw_message_items = payload.get("messages")
         items = [
@@ -63,16 +58,25 @@ class GmailService:
                 "id": item.get("id"),
                 "thread_id": item.get("threadId"),
             }
-            for item in cast(list[dict[str, object]], raw_message_items if isinstance(raw_message_items, list) else [])
+            for item in cast(
+                list[dict[str, object]],
+                raw_message_items if isinstance(raw_message_items, list) else [],
+            )
         ]
         next_page_token_raw = payload.get("nextPageToken")
-        next_page_token = cast(str | None, next_page_token_raw if isinstance(next_page_token_raw, str) else None)
+        next_page_token = cast(
+            str | None, next_page_token_raw if isinstance(next_page_token_raw, str) else None
+        )
         return enrich_collection(
             items=items,
             next_page_token=next_page_token,
             resource_type="gmail_message_collection",
             human_summary=f"Found {len(items)} Gmail message(s).",
-            next_suggested_actions=["gmail_get_message", "gmail_list_threads", "gmail_create_draft"],
+            next_suggested_actions=[
+                "gmail_get_message",
+                "gmail_list_threads",
+                "gmail_create_draft",
+            ],
             safety_level="read",
         )
 
@@ -83,14 +87,11 @@ class GmailService:
         input_data: GmailGetMessageInput,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
-        try:
-            payload = self.client.get_message(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                message_id=input_data.message_id,
-            )
-        except AppError:
-            raise
+        payload = self.client.get_message(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            message_id=input_data.message_id,
+        )
         normalized = _normalize_message(payload)
         return enrich_resource(
             normalized,
@@ -98,7 +99,11 @@ class GmailService:
             message_id=normalized.get("id"),
             thread_id=normalized.get("thread_id"),
             human_summary=f"Loaded Gmail message '{normalized.get('subject') or normalized.get('id')}'.",
-            next_suggested_actions=["gmail_create_draft", "gmail_delete_message", "gmail_list_threads"],
+            next_suggested_actions=[
+                "gmail_create_draft",
+                "gmail_delete_message",
+                "gmail_list_threads",
+            ],
             safety_level="read",
         )
 
@@ -109,16 +114,13 @@ class GmailService:
         input_data: GmailListThreadsInput,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
-        try:
-            payload = self.client.list_threads(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                query=input_data.query,
-                max_results=input_data.max_results,
-                page_token=input_data.page_token,
-            )
-        except AppError:
-            raise
+        payload = self.client.list_threads(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            query=input_data.query,
+            max_results=input_data.max_results,
+            page_token=input_data.page_token,
+        )
 
         raw_thread_items = payload.get("threads")
         items = [
@@ -127,10 +129,15 @@ class GmailService:
                 "history_id": item.get("historyId"),
                 "snippet": item.get("snippet"),
             }
-            for item in cast(list[dict[str, object]], raw_thread_items if isinstance(raw_thread_items, list) else [])
+            for item in cast(
+                list[dict[str, object]],
+                raw_thread_items if isinstance(raw_thread_items, list) else [],
+            )
         ]
         next_page_token_raw = payload.get("nextPageToken")
-        next_page_token = cast(str | None, next_page_token_raw if isinstance(next_page_token_raw, str) else None)
+        next_page_token = cast(
+            str | None, next_page_token_raw if isinstance(next_page_token_raw, str) else None
+        )
         return enrich_collection(
             items=items,
             next_page_token=next_page_token,
@@ -148,16 +155,16 @@ class GmailService:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         raw_message = build_raw_message(**input_data.message.model_dump())
-        try:
-            payload = self.client.create_draft(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                message_body=raw_message,
-            )
-        except AppError:
-            raise
+        payload = self.client.create_draft(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            message_body=raw_message,
+        )
         normalized = _normalize_draft(payload)
-        message_payload = cast(dict[str, object] | None, normalized.get("message") if isinstance(normalized.get("message"), dict) else None)
+        message_payload = cast(
+            dict[str, object] | None,
+            normalized.get("message") if isinstance(normalized.get("message"), dict) else None,
+        )
         message_id = message_payload.get("id") if message_payload is not None else None
         return enrich_resource(
             normalized,
@@ -177,17 +184,17 @@ class GmailService:
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         raw_message = build_raw_message(**input_data.message.model_dump())
-        try:
-            payload = self.client.update_draft(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                draft_id=input_data.draft_id,
-                message_body=raw_message,
-            )
-        except AppError:
-            raise
+        payload = self.client.update_draft(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            draft_id=input_data.draft_id,
+            message_body=raw_message,
+        )
         normalized = _normalize_draft(payload)
-        message_payload = cast(dict[str, object] | None, normalized.get("message") if isinstance(normalized.get("message"), dict) else None)
+        message_payload = cast(
+            dict[str, object] | None,
+            normalized.get("message") if isinstance(normalized.get("message"), dict) else None,
+        )
         message_id = message_payload.get("id") if message_payload is not None else None
         return enrich_resource(
             normalized,
@@ -206,14 +213,11 @@ class GmailService:
         input_data: GmailDeleteDraftInput,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
-        try:
-            self.client.delete_draft(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                draft_id=input_data.draft_id,
-            )
-        except AppError:
-            raise
+        self.client.delete_draft(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            draft_id=input_data.draft_id,
+        )
         return enrich_resource(
             {"deleted": True, "draft_id": input_data.draft_id},
             resource_type="gmail_draft",
@@ -252,13 +256,14 @@ class GmailService:
             },
         )
 
+    @confirmed_operation
     def confirm_send_email(
         self,
         *,
         external_subject: str,
         input_data: GmailConfirmSendEmailInput,
         tenant_id: str | None = None,
-        ) -> dict[str, object]:
+    ) -> dict[str, object]:
         record = self._get_pending_operation(
             external_subject=external_subject,
             tenant_id=tenant_id,
@@ -327,21 +332,16 @@ class GmailService:
         resource_id: str | None = None,
         resource_name: str | None = None,
     ) -> PendingGoogleOperation:
-        user = self.connections.get_or_create_user(external_subject=external_subject, tenant_id=tenant_id)
-        record = self.pending_operations.create(
-            user_id=user.id,
-            provider="google",
-            operation_key=_generate_operation_key(),
+        return create_pending_operation(
+            self,
+            external_subject=external_subject,
+            tenant_id=tenant_id,
             operation_type=operation_type,
             resource_type=resource_type,
+            payload_normalized=payload_normalized,
             resource_id=resource_id,
             resource_name=resource_name,
-            payload_normalized=payload_normalized,
-            payload_hash=_hash_payload(payload_normalized),
-            expires_at=_operation_expiry(self.settings.drive_confirmation_ttl_seconds),
         )
-        self.session.commit()
-        return record
 
     def delete_message(
         self,
@@ -350,14 +350,11 @@ class GmailService:
         input_data: GmailDeleteMessageInput,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
-        try:
-            payload = self.client.trash_message(
-                external_subject=external_subject,
-                tenant_id=tenant_id,
-                message_id=input_data.message_id,
-            )
-        except AppError:
-            raise
+        payload = self.client.trash_message(
+            external_subject=external_subject,
+            tenant_id=tenant_id,
+            message_id=input_data.message_id,
+        )
         result = {
             "trashed": True,
             "message_id": payload.get("id", input_data.message_id),

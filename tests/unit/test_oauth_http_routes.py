@@ -4,11 +4,10 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-
 from starlette.testclient import TestClient
 
-from app.factory import create_app
 from app.errors import ConfigurationError, ValidationError
+from app.factory import create_app
 from app.services.auth_service import AuthStatusResult
 
 
@@ -23,23 +22,25 @@ def test_oauth_start_requires_auth() -> None:
 
 def test_oauth_status_uses_authenticated_subject() -> None:
     app = create_app()
-    with patch(
-        "app.factory.AuthService.get_google_status",
-        return_value=AuthStatusResult(
-            False,
-            None,
-            [],
-            None,
-            ["https://www.googleapis.com/auth/drive"],
-            "Google account is not connected",
-            "Run auth_google_begin to connect a Google account.",
+    with (
+        patch(
+            "app.factory.AuthService.get_google_status",
+            return_value=AuthStatusResult(
+                False,
+                None,
+                [],
+                None,
+                ["https://www.googleapis.com/auth/drive"],
+                "Google account is not connected",
+                "Run auth_google_begin to connect a Google account.",
+            ),
         ),
+        TestClient(app) as client,
     ):
-        with TestClient(app) as client:
-            response = client.get(
-                "/oauth/google/status",
-                headers={"Authorization": "Bearer local-dev-token"},
-            )
+        response = client.get(
+            "/oauth/google/status",
+            headers={"Authorization": "Bearer local-dev-token"},
+        )
 
     assert response.status_code == 200
     payload = response.json()
@@ -52,15 +53,17 @@ def test_oauth_status_uses_authenticated_subject() -> None:
 
 def test_oauth_start_returns_typed_app_error_payload() -> None:
     app = create_app()
-    with patch(
-        "app.factory.AuthService.begin_google_auth",
-        side_effect=ConfigurationError("Google OAuth client credentials are not configured"),
+    with (
+        patch(
+            "app.factory.AuthService.begin_google_auth",
+            side_effect=ConfigurationError("Google OAuth client credentials are not configured"),
+        ),
+        TestClient(app) as client,
     ):
-        with TestClient(app) as client:
-            response = client.get(
-                "/oauth/google/start",
-                headers={"Authorization": "Bearer local-dev-token"},
-            )
+        response = client.get(
+            "/oauth/google/start",
+            headers={"Authorization": "Bearer local-dev-token"},
+        )
 
     assert response.status_code == 500
     assert response.json() == {
@@ -73,12 +76,14 @@ def test_oauth_start_returns_typed_app_error_payload() -> None:
 
 def test_oauth_callback_returns_safe_html_for_unexpected_failure(capsys) -> None:
     app = create_app()
-    with patch(
-        "app.factory.AuthService.complete_google_auth",
-        side_effect=RuntimeError("provider-secret-must-not-leak"),
+    with (
+        patch(
+            "app.factory.AuthService.complete_google_auth",
+            side_effect=RuntimeError("provider-secret-must-not-leak"),
+        ),
+        TestClient(app) as client,
     ):
-        with TestClient(app) as client:
-            response = client.get("/oauth/google/callback?state=test-state&code=test-code")
+        response = client.get("/oauth/google/callback?state=test-state&code=test-code")
 
     assert response.status_code == 500
     assert "No pudimos conectar tu cuenta" in response.text
@@ -95,12 +100,14 @@ def test_oauth_callback_returns_safe_html_for_unexpected_failure(capsys) -> None
 def test_callback_uses_code_and_configured_redirect_and_escapes_email() -> None:
     app = create_app()
     connection = SimpleNamespace(
-        user=SimpleNamespace(external_subject="callback-user"),
+        user=SimpleNamespace(tenant_id="", external_subject="callback-user"),
         google_email='<script>alert("x")</script>@example.com',
     )
-    with patch("app.factory.AuthService.complete_google_auth", return_value=connection) as complete:
-        with TestClient(app) as client:
-            response = client.get("/oauth/google/callback?state=state-value&code=code-value")
+    with (
+        patch("app.factory.AuthService.complete_google_auth", return_value=connection) as complete,
+        TestClient(app) as client,
+    ):
+        response = client.get("/oauth/google/callback?state=state-value&code=code-value")
     complete.assert_called_once_with(state="state-value", code="code-value")
     assert response.status_code == 200
     assert "Tu cuenta de Google está conectada" in response.text
@@ -118,19 +125,24 @@ def test_callback_missing_parameters_is_invalid(query: str) -> None:
 
 
 def test_callback_expired_state_is_invalid() -> None:
-    with patch("app.factory.AuthService.complete_google_auth", side_effect=ValidationError("expired")):
-        with TestClient(create_app()) as client:
-            response = client.get("/oauth/google/callback?state=expired&code=unused")
+    with (
+        patch(
+            "app.factory.AuthService.complete_google_auth", side_effect=ValidationError("expired")
+        ),
+        TestClient(create_app()) as client,
+    ):
+        response = client.get("/oauth/google/callback?state=expired&code=unused")
     assert response.status_code == 400
     assert "El enlace ya no es válido" in response.text
 
 
 def test_callback_cancellation_consumes_state_without_exchanging_code() -> None:
-    with patch("app.factory.AuthService.cancel_google_auth") as cancel, patch(
-        "app.factory.AuthService.complete_google_auth"
-    ) as complete:
-        with TestClient(create_app()) as client:
-            response = client.get("/oauth/google/callback?state=valid-state&error=access_denied")
+    with (
+        patch("app.factory.AuthService.cancel_google_auth") as cancel,
+        patch("app.factory.AuthService.complete_google_auth") as complete,
+        TestClient(create_app()) as client,
+    ):
+        response = client.get("/oauth/google/callback?state=valid-state&error=access_denied")
     cancel.assert_called_once_with(state="valid-state")
     complete.assert_not_called()
     assert response.status_code == 200
@@ -138,7 +150,9 @@ def test_callback_cancellation_consumes_state_without_exchanging_code() -> None:
 
 
 def test_callback_cancellation_rejects_invalid_state() -> None:
-    with patch("app.factory.AuthService.cancel_google_auth", side_effect=ValidationError("invalid")):
-        with TestClient(create_app()) as client:
-            response = client.get("/oauth/google/callback?state=invalid&error=access_denied")
+    with (
+        patch("app.factory.AuthService.cancel_google_auth", side_effect=ValidationError("invalid")),
+        TestClient(create_app()) as client,
+    ):
+        response = client.get("/oauth/google/callback?state=invalid&error=access_denied")
     assert response.status_code == 400

@@ -1,16 +1,25 @@
 import logging
 from dataclasses import dataclass
+from functools import lru_cache
 
 import jwt
 from jwt import PyJWKClient
-from jwt.exceptions import InvalidTokenError
+from jwt.exceptions import InvalidTokenError, PyJWKClientConnectionError, PyJWKClientError
 from starlette.requests import HTTPConnection
 
 from app.config import Settings, get_settings
 from app.context.request_context import RequestContext
 
-
 logger = logging.getLogger(__name__)
+
+
+class JWTProviderUnavailableError(Exception):
+    """JWKS unavailable; authentication remains closed."""
+
+
+@lru_cache(maxsize=8)
+def jwks_client(url: str) -> PyJWKClient:
+    return PyJWKClient(url, timeout=10)
 
 
 class JWTAuthenticationError(Exception):
@@ -39,10 +48,14 @@ def extract_bearer_token(conn: HTTPConnection) -> str:
     return token.strip()
 
 
-def authenticate_request(conn: HTTPConnection, settings: Settings | None = None) -> AuthenticatedPrincipal:
+def authenticate_request(
+    conn: HTTPConnection, settings: Settings | None = None
+) -> AuthenticatedPrincipal:
     current_settings = settings or get_settings()
     token = extract_bearer_token(conn)
 
+    if current_settings.environment != "development" and current_settings.jwt_test_mode:
+        raise JWTAuthenticationError("Test authentication is disabled")
     if current_settings.jwt_test_mode and token == current_settings.jwt_test_token:
         claims = {
             "sub": current_settings.jwt_test_subject,
@@ -67,8 +80,7 @@ def decode_jwt(token: str, settings: Settings) -> dict[str, object]:
 
     try:
         if settings.jwt_jwks_url:
-            jwks_client = PyJWKClient(settings.jwt_jwks_url)
-            signing_key = jwks_client.get_signing_key_from_jwt(token)
+            signing_key = jwks_client(settings.jwt_jwks_url).get_signing_key_from_jwt(token)
             return jwt.decode(token, signing_key.key, **kwargs)
 
         if settings.jwt_public_key:
@@ -76,8 +88,10 @@ def decode_jwt(token: str, settings: Settings) -> dict[str, object]:
 
         if settings.jwt_shared_secret:
             return jwt.decode(token, settings.jwt_shared_secret, **kwargs)
-    except InvalidTokenError as exc:
-        logger.warning("JWT validation failed: %s", exc)
+    except PyJWKClientConnectionError:
+        raise JWTProviderUnavailableError("JWT key provider is unavailable") from None
+    except (InvalidTokenError, PyJWKClientError) as exc:
+        logger.warning("JWT validation failed (%s)", type(exc).__name__)
         raise JWTAuthenticationError("Invalid JWT token") from exc
 
     raise JWTAuthenticationError("JWT verifier is not configured")
@@ -95,13 +109,20 @@ def build_request_context(claims: dict[str, object], *, token_type: str = "jwt")
     if not subject:
         raise JWTAuthenticationError("JWT token is missing subject")
 
+    tenant = claims.get("tenant_id")
+    if "tenant_id" in claims and (
+        not isinstance(tenant, str) or not tenant.strip() or len(tenant) > 255
+    ):
+        raise JWTAuthenticationError("Invalid tenant_id claim")
+    if len(subject) > 255 or not isinstance(claims.get("sub"), str):
+        raise JWTAuthenticationError("Invalid subject claim")
     return RequestContext(
         user_id=subject,
         subject=subject,
         issuer=issuer,
         audience=audience,
         token_type=token_type,
-        tenant_id=_optional_string(claims.get("tenant_id")),
+        tenant_id=tenant,
         email=_optional_string(claims.get("email")),
         approvals=_approval_tuple(claims.get("approved_tools")),
         claims=claims,

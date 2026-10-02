@@ -1,23 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from contextlib import contextmanager
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from app.config import get_settings
 from app.db.session import SessionLocal
-from app.errors import ApprovalRequiredError, AppError, InternalError
+from app.errors import AppError, ApprovalRequiredError, InternalError
 from app.services.audit_service import AuditService
 
-
 logger = logging.getLogger(__name__)
-
-
-@contextmanager
-def tool_session():
-    with SessionLocal() as session:
-        yield session
 
 
 def audited_call(
@@ -34,7 +26,7 @@ def audited_call(
         audit_service = AuditService(session)
         try:
             result = operation(session)
-            audit_service.record_tool_call(
+            audit_service.safe_record_tool_call(
                 external_subject=external_subject,
                 tenant_id=tenant_id,
                 tool_name=tool_name,
@@ -45,7 +37,8 @@ def audited_call(
             )
             return result
         except AppError as exc:
-            audit_service.record_tool_call(
+            session.rollback()
+            audit_service.safe_record_tool_call(
                 external_subject=external_subject,
                 tenant_id=tenant_id,
                 tool_name=tool_name,
@@ -56,9 +49,10 @@ def audited_call(
                 error_code=exc.code,
             )
             raise
-        except Exception as exc:
-            logger.exception("Unexpected error during tool execution", extra={"tool_name": tool_name})
-            audit_service.record_tool_call(
+        except Exception as exc:  # noqa: BLE001 - boundary prevents leakage or repetition of external writes
+            session.rollback()
+            logger.error("Unexpected tool failure (%s, %s)", tool_name, type(exc).__name__)
+            audit_service.safe_record_tool_call(
                 external_subject=external_subject,
                 tenant_id=tenant_id,
                 tool_name=tool_name,
@@ -68,7 +62,13 @@ def audited_call(
                 result_status="error",
                 error_code="internal_error",
             )
-            raise InternalError(metadata={"tool_name": tool_name}) from exc
+            raise InternalError(metadata={"tool_name": tool_name}) from None
+        finally:
+            for client in session.info.pop("google_clients", {}).values():
+                try:
+                    client.close()
+                except Exception:  # noqa: BLE001 - cleanup must not change a completed write outcome
+                    logger.error("Google transport cleanup failed")
 
 
 def ensure_tool_approval(*, tool_name: str, approved_tools: tuple[str, ...]) -> None:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from googleapiclient.discovery import build
 from sqlalchemy.orm import Session
 
 from app.config import Settings
@@ -12,11 +11,9 @@ class TasksClient(GoogleApiClientBase):
         super().__init__(session, settings)
 
     def _service(self, *, external_subject: str, tenant_id: str | None = None):
-        credentials = self.credentials_provider.get_for_user(
-            external_subject=external_subject,
-            tenant_id=tenant_id,
+        return self._get_service(
+            "tasks", "v1", external_subject=external_subject, tenant_id=tenant_id
         )
-        return build("tasks", "v1", credentials=credentials, cache_discovery=False)
 
     def list_tasklists(
         self,
@@ -116,7 +113,9 @@ class TasksClient(GoogleApiClientBase):
         tenant_id: str | None = None,
     ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        return self._execute(service.tasks().patch(tasklist=tasklist_id, task=task_id, body=task_body))
+        return self._execute(
+            service.tasks().patch(tasklist=tasklist_id, task=task_id, body=task_body)
+        )
 
     def get_task(
         self,

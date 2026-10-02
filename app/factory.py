@@ -16,10 +16,11 @@ from app.errors import AppError, InternalError, ValidationError
 from app.logging import configure_logging
 from app.mcp_server import mcp
 from app.oauth.callback_page import callback_page
-from app.security.middleware import JWTAuthMiddleware
+from app.security.middleware import JWTAuthMiddleware, MCPBodyLimitMiddleware
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
-
+from app.services.maintenance import maintenance_lifespan
+from app.tool_runtime import ensure_tool_approval
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ def _allowed_hosts(settings) -> list[str]:
 
 def create_app() -> Starlette:
     settings = get_settings()
+    settings.validate_startup()
     configure_logging(settings.log_level, json_logs=settings.log_json)
     mcp_http_app = mcp.http_app(path=settings.mcp_path)
 
@@ -61,7 +63,7 @@ def create_app() -> Starlette:
             }
         )
 
-    async def oauth_google_start(request: Request) -> JSONResponse:
+    def oauth_google_start(request: Request) -> JSONResponse:
         context = request.state.request_context
         subject = context.subject
         tenant_id = context.tenant_id
@@ -72,7 +74,7 @@ def create_app() -> Starlette:
             try:
                 result = service.begin_google_auth(external_subject=subject, tenant_id=tenant_id)
             except AppError as exc:
-                audit_service.record_tool_call(
+                audit_service.safe_record_tool_call(
                     external_subject=subject,
                     tenant_id=tenant_id,
                     tool_name="oauth_google_start",
@@ -83,10 +85,10 @@ def create_app() -> Starlette:
                     error_code=exc.code,
                 )
                 return _json_error_response(exc)
-            except Exception:
-                logger.exception("Unexpected error starting Google OAuth", extra={"subject": subject})
+            except Exception:  # noqa: BLE001 - boundary prevents leakage or repetition of external writes
+                logger.error("Unexpected OAuth start failure")
                 error = InternalError(metadata={"endpoint": "/oauth/google/start"})
-                audit_service.record_tool_call(
+                audit_service.safe_record_tool_call(
                     external_subject=subject,
                     tenant_id=tenant_id,
                     tool_name="oauth_google_start",
@@ -97,7 +99,7 @@ def create_app() -> Starlette:
                     error_code=error.code,
                 )
                 return _json_error_response(error)
-            audit_service.record_tool_call(
+            audit_service.safe_record_tool_call(
                 external_subject=subject,
                 tenant_id=tenant_id,
                 tool_name="oauth_google_start",
@@ -116,7 +118,7 @@ def create_app() -> Starlette:
             }
         )
 
-    async def oauth_google_callback(request: Request) -> HTMLResponse:
+    def oauth_google_callback(request: Request) -> HTMLResponse:
         state = request.query_params.get("state")
         code = request.query_params.get("code")
         provider_error = request.query_params.get("error")
@@ -133,7 +135,7 @@ def create_app() -> Starlette:
                     return callback_page(result, status_code=200 if result == "cancelled" else 502)
                 connection = service.complete_google_auth(state=state, code=cast(str, code))
             except AppError as exc:
-                audit_service.record_tool_call(
+                audit_service.safe_record_tool_call(
                     external_subject="oauth-callback",
                     tenant_id=None,
                     tool_name="oauth_google_callback",
@@ -145,10 +147,10 @@ def create_app() -> Starlette:
                 )
                 result = "invalid" if isinstance(exc, ValidationError) else "error"
                 return callback_page(result, status_code=exc.status_code)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - boundary prevents leakage or repetition of external writes
                 # Provider exceptions can contain codes or tokens: log only their type.
                 logger.error("Google OAuth callback failed (%s)", type(exc).__name__)
-                audit_service.record_tool_call(
+                audit_service.safe_record_tool_call(
                     external_subject="oauth-callback",
                     tenant_id=None,
                     tool_name="oauth_google_callback",
@@ -159,9 +161,9 @@ def create_app() -> Starlette:
                     error_code="internal_error",
                 )
                 return callback_page("error", status_code=500)
-            audit_service.record_tool_call(
+            audit_service.safe_record_tool_call(
                 external_subject=connection.user.external_subject,
-                tenant_id=None,
+                tenant_id=connection.user.tenant_id or None,
                 tool_name="oauth_google_callback",
                 provider="google",
                 resource_type="oauth",
@@ -171,7 +173,7 @@ def create_app() -> Starlette:
 
         return callback_page("connected", email=connection.google_email)
 
-    async def oauth_google_disconnect(request: Request) -> JSONResponse:
+    def oauth_google_disconnect(request: Request) -> JSONResponse:
         context = request.state.request_context
         subject = context.subject
         tenant_id = context.tenant_id
@@ -180,9 +182,14 @@ def create_app() -> Starlette:
             audit_service = AuditService(session)
             service = AuthService(session, settings)
             try:
-                disconnected = service.disconnect_google(external_subject=subject, tenant_id=tenant_id)
+                ensure_tool_approval(
+                    tool_name="auth_google_disconnect", approved_tools=context.approvals
+                )
+                disconnected = service.disconnect_google(
+                    external_subject=subject, tenant_id=tenant_id
+                )
             except AppError as exc:
-                audit_service.record_tool_call(
+                audit_service.safe_record_tool_call(
                     external_subject=subject,
                     tenant_id=tenant_id,
                     tool_name="oauth_google_disconnect",
@@ -193,10 +200,10 @@ def create_app() -> Starlette:
                     error_code=exc.code,
                 )
                 return _json_error_response(exc)
-            except Exception:
-                logger.exception("Unexpected error disconnecting Google OAuth", extra={"subject": subject})
+            except Exception:  # noqa: BLE001 - boundary prevents leakage or repetition of external writes
+                logger.error("Unexpected OAuth disconnect failure")
                 error = InternalError(metadata={"endpoint": "/oauth/google/disconnect"})
-                audit_service.record_tool_call(
+                audit_service.safe_record_tool_call(
                     external_subject=subject,
                     tenant_id=tenant_id,
                     tool_name="oauth_google_disconnect",
@@ -207,7 +214,7 @@ def create_app() -> Starlette:
                     error_code=error.code,
                 )
                 return _json_error_response(error)
-            audit_service.record_tool_call(
+            audit_service.safe_record_tool_call(
                 external_subject=subject,
                 tenant_id=tenant_id,
                 tool_name="oauth_google_disconnect",
@@ -219,7 +226,7 @@ def create_app() -> Starlette:
 
         return JSONResponse({"disconnected": disconnected})
 
-    async def oauth_google_status(request: Request) -> JSONResponse:
+    def oauth_google_status(request: Request) -> JSONResponse:
         context = request.state.request_context
         subject = context.subject
         tenant_id = context.tenant_id
@@ -230,7 +237,7 @@ def create_app() -> Starlette:
             try:
                 result = service.get_google_status(external_subject=subject, tenant_id=tenant_id)
             except AppError as exc:
-                audit_service.record_tool_call(
+                audit_service.safe_record_tool_call(
                     external_subject=subject,
                     tenant_id=tenant_id,
                     tool_name="oauth_google_status",
@@ -241,10 +248,10 @@ def create_app() -> Starlette:
                     error_code=exc.code,
                 )
                 return _json_error_response(exc)
-            except Exception:
-                logger.exception("Unexpected error retrieving Google OAuth status", extra={"subject": subject})
+            except Exception:  # noqa: BLE001 - boundary prevents leakage or repetition of external writes
+                logger.error("Unexpected OAuth status failure")
                 error = InternalError(metadata={"endpoint": "/oauth/google/status"})
-                audit_service.record_tool_call(
+                audit_service.safe_record_tool_call(
                     external_subject=subject,
                     tenant_id=tenant_id,
                     tool_name="oauth_google_status",
@@ -255,7 +262,7 @@ def create_app() -> Starlette:
                     error_code=error.code,
                 )
                 return _json_error_response(error)
-            audit_service.record_tool_call(
+            audit_service.safe_record_tool_call(
                 external_subject=subject,
                 tenant_id=tenant_id,
                 tool_name="oauth_google_status",
@@ -279,10 +286,11 @@ def create_app() -> Starlette:
 
     starlette_app = Starlette(
         debug=settings.environment == "development",
-        lifespan=mcp_http_app.lifespan,
+        lifespan=maintenance_lifespan(mcp_http_app.lifespan),
         middleware=[
             Middleware(TrustedHostMiddleware, allowed_hosts=_allowed_hosts(settings)),
             Middleware(JWTAuthMiddleware),
+            Middleware(MCPBodyLimitMiddleware),
         ],
         routes=[
             Route("/health", healthcheck),

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 
+import requests
 from google.auth.exceptions import RefreshError as GoogleRefreshError
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2 import id_token
@@ -10,8 +12,18 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db.models import GoogleConnection, User
-from app.errors import AuthenticationProviderError, ConfigurationError, ProviderError, ValidationError
-from app.oauth.google_oauth import GoogleOAuthTokens, build_authorization_url, build_user_credentials, exchange_code
+from app.errors import (
+    AuthenticationProviderError,
+    ConfigurationError,
+    ProviderError,
+    ValidationError,
+)
+from app.oauth.google_oauth import (
+    GoogleOAuthTokens,
+    build_authorization_url,
+    build_user_credentials,
+    exchange_code,
+)
 from app.oauth.state_store import OAuthStateStore
 from app.security.encryption import decrypt_text, encrypt_text
 from app.services.connection_service import ConnectionService
@@ -43,9 +55,13 @@ class AuthService:
         self.state_store = OAuthStateStore(session)
         self.connections = ConnectionService(session)
 
-    def begin_google_auth(self, *, external_subject: str, tenant_id: str | None = None) -> AuthBeginResult:
+    def begin_google_auth(
+        self, *, external_subject: str, tenant_id: str | None = None
+    ) -> AuthBeginResult:
         self._validate_google_oauth_settings()
-        user = self.connections.get_or_create_user(external_subject=external_subject, tenant_id=tenant_id)
+        user = self.connections.get_or_create_user(
+            external_subject=external_subject, tenant_id=tenant_id
+        )
         state_record = self.state_store.create(
             user=user,
             provider="google",
@@ -72,7 +88,7 @@ class AuthService:
         authorization_response: str | None = None,
     ) -> GoogleConnection:
         self._validate_google_oauth_settings()
-        state_record = self.state_store.get_valid(state)
+        state_record = self.state_store.consume(state)
         if state_record is None or state_record.provider != "google":
             raise ValidationError("OAuth state is invalid or expired")
 
@@ -85,20 +101,24 @@ class AuthService:
         )
         user = state_record.user
         google_email, google_subject = self._extract_google_identity(tokens)
-        connection = self._upsert_google_connection(user=user, tokens=tokens, google_email=google_email, google_subject=google_subject)
-        self.state_store.delete(state_record)
+        connection = self._upsert_google_connection(
+            user=user, tokens=tokens, google_email=google_email, google_subject=google_subject
+        )
         self.session.commit()
         return connection
 
     def cancel_google_auth(self, *, state: str) -> None:
-        state_record = self.state_store.get_valid(state)
+        state_record = self.state_store.consume(state)
         if state_record is None or state_record.provider != "google":
             raise ValidationError("OAuth state is invalid or expired")
-        self.state_store.delete(state_record)
         self.session.commit()
 
-    def get_google_status(self, *, external_subject: str, tenant_id: str | None = None) -> AuthStatusResult:
-        user = self.connections.get_or_create_user(external_subject=external_subject, tenant_id=tenant_id)
+    def get_google_status(
+        self, *, external_subject: str, tenant_id: str | None = None
+    ) -> AuthStatusResult:
+        user = self.connections.get_or_create_user(
+            external_subject=external_subject, tenant_id=tenant_id
+        )
         connection = self.connections.get_google_connection(user=user)
         self.session.commit()
         if connection is None:
@@ -112,7 +132,9 @@ class AuthService:
                 recommended_action="Run auth_google_begin to connect a Google account.",
             )
         granted_scopes = list(connection.granted_scopes or [])
-        missing_scopes = [scope for scope in self.settings.google_oauth_scope_list if scope not in granted_scopes]
+        missing_scopes = [
+            scope for scope in self.settings.google_oauth_scope_list if scope not in granted_scopes
+        ]
         status_detail, recommended_action = _describe_connection_status(connection.status)
         return AuthStatusResult(
             connected=connection.status == "active",
@@ -125,7 +147,9 @@ class AuthService:
         )
 
     def disconnect_google(self, *, external_subject: str, tenant_id: str | None = None) -> bool:
-        user = self.connections.get_or_create_user(external_subject=external_subject, tenant_id=tenant_id)
+        user = self.connections.get_or_create_user(
+            external_subject=external_subject, tenant_id=tenant_id
+        )
         connection = self.connections.get_google_connection(user=user)
         if connection is None:
             self.session.commit()
@@ -134,8 +158,12 @@ class AuthService:
         self.session.commit()
         return True
 
-    def get_google_credentials_for_user(self, *, external_subject: str, tenant_id: str | None = None):
-        user = self.connections.get_or_create_user(external_subject=external_subject, tenant_id=tenant_id)
+    def get_google_credentials_for_user(
+        self, *, external_subject: str, tenant_id: str | None = None
+    ):
+        user = self.connections.get_or_create_user(
+            external_subject=external_subject, tenant_id=tenant_id
+        )
         connection = self.connections.get_google_connection(user=user)
         if connection is None:
             raise AuthenticationProviderError("Google connection is missing")
@@ -164,7 +192,13 @@ class AuthService:
             credentials.expiry = _google_auth_compatible_expiry(connection.expires_at)
         if credentials.expired and credentials.refresh_token:
             try:
-                credentials.refresh(GoogleAuthRequest())
+                with requests.Session() as transport:
+                    credentials.refresh(
+                        partial(
+                            GoogleAuthRequest(session=transport),
+                            timeout=self.settings.google_api_timeout_seconds,
+                        )
+                    )
             except GoogleRefreshError as exc:
                 refresh_error = _classify_google_refresh_error(exc)
                 if refresh_error["error"] == "invalid_grant":
@@ -176,17 +210,19 @@ class AuthService:
                             "connection_status": connection.status,
                             **refresh_error,
                         },
-                    ) from exc
+                    ) from None
                 raise ProviderError(
                     "Unable to refresh Google credentials",
                     metadata={
                         "provider": "google",
                         **refresh_error,
                     },
-                ) from exc
+                ) from None
             connection.access_token_encrypted = encrypt_text(credentials.token, self.settings)
             if credentials.refresh_token:
-                connection.refresh_token_encrypted = encrypt_text(credentials.refresh_token, self.settings)
+                connection.refresh_token_encrypted = encrypt_text(
+                    credentials.refresh_token, self.settings
+                )
             connection.expires_at = credentials.expiry
             self.session.commit()
         return credentials
@@ -213,7 +249,9 @@ class AuthService:
                 granted_scopes=tokens.scopes,
                 access_token_encrypted=encrypt_text(tokens.access_token, self.settings),
                 refresh_token_encrypted=(
-                    encrypt_text(tokens.refresh_token, self.settings) if tokens.refresh_token else None
+                    encrypt_text(tokens.refresh_token, self.settings)
+                    if tokens.refresh_token
+                    else None
                 ),
                 expires_at=_parse_expiry(tokens.expiry_iso),
             )
@@ -221,13 +259,18 @@ class AuthService:
             self.session.flush()
             return existing
 
+        previous_subject = existing.google_subject
         existing.google_email = google_email
         existing.google_subject = google_subject
         existing.status = "active"
         existing.granted_scopes = tokens.scopes
         existing.access_token_encrypted = encrypt_text(tokens.access_token, self.settings)
         existing.refresh_token_encrypted = (
-            encrypt_text(tokens.refresh_token, self.settings) if tokens.refresh_token else existing.refresh_token_encrypted
+            encrypt_text(tokens.refresh_token, self.settings)
+            if tokens.refresh_token
+            else existing.refresh_token_encrypted
+            if previous_subject == google_subject
+            else None
         )
         existing.expires_at = _parse_expiry(tokens.expiry_iso)
         self.session.flush()
@@ -236,12 +279,16 @@ class AuthService:
     def _extract_google_identity(self, tokens: GoogleOAuthTokens) -> tuple[str, str]:
         if not tokens.id_token:
             raise AuthenticationProviderError("Google ID token was not returned")
-        info = id_token.verify_oauth2_token(
-            tokens.id_token,
-            GoogleAuthRequest(),
-            self.settings.google_client_id,
-            clock_skew_in_seconds=self.settings.google_id_token_clock_skew_seconds,
-        )
+        with requests.Session() as transport:
+            info = id_token.verify_oauth2_token(
+                tokens.id_token,
+                partial(
+                    GoogleAuthRequest(session=transport),
+                    timeout=self.settings.google_api_timeout_seconds,
+                ),
+                self.settings.google_client_id,
+                clock_skew_in_seconds=self.settings.google_id_token_clock_skew_seconds,
+            )
         google_email = str(info.get("email") or "")
         google_subject = str(info.get("sub") or "")
         email_verified = bool(info.get("email_verified", False))
@@ -274,10 +321,12 @@ def _classify_google_refresh_error(exc: GoogleRefreshError) -> dict[str, str]:
         error_payload = exc.args[1]
         error = error_payload.get("error")
         if isinstance(error, str) and error:
-            metadata["error"] = error
-        error_description = error_payload.get("error_description")
-        if isinstance(error_description, str) and error_description:
-            metadata["error_description"] = error_description
+            metadata["error"] = (
+                error
+                if error
+                in {"invalid_grant", "invalid_client", "invalid_scope", "temporarily_unavailable"}
+                else "refresh_failed"
+            )
     if "error" not in metadata:
         metadata["error"] = "refresh_failed"
     return metadata

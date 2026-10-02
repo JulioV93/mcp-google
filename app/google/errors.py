@@ -20,7 +20,6 @@ from app.errors import (
     TemporaryProviderError,
 )
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -108,13 +107,15 @@ def execute_google_request(
         except HttpError as exc:
             mapped_error = map_google_http_error(exc)
             if not mapped_error.retryable or attempts >= max_retries:
-                raise mapped_error from exc
+                raise mapped_error from None
             delay_seconds = _compute_retry_delay_seconds(
                 attempts=attempts,
                 mapped_error=mapped_error,
                 base_delay_seconds=base_delay_seconds,
                 max_delay_seconds=max_delay_seconds,
             )
+            if delay_seconds > max_delay_seconds:
+                raise mapped_error from None
             attempts += 1
             logger.warning(
                 "Retrying Google API request after retryable error",
@@ -150,13 +151,15 @@ def execute_google_media_request(
         except HttpError as exc:
             mapped_error = map_google_http_error(exc)
             if not mapped_error.retryable or attempts >= max_retries:
-                raise mapped_error from exc
+                raise mapped_error from None
             delay_seconds = _compute_retry_delay_seconds(
                 attempts=attempts,
                 mapped_error=mapped_error,
                 base_delay_seconds=base_delay_seconds,
                 max_delay_seconds=max_delay_seconds,
             )
+            if delay_seconds > max_delay_seconds:
+                raise mapped_error from None
             attempts += 1
             logger.warning(
                 "Retrying Google API media operation after retryable error",
@@ -196,15 +199,12 @@ def _extract_google_error_payload(exc: HttpError) -> dict[str, Any]:
 
 
 def _build_detail(*, exc: HttpError, error_payload: dict[str, Any]) -> str:
-    error = error_payload.get("error")
-    if isinstance(error, dict):
-        message = error.get("message")
-        if isinstance(message, str) and message:
-            return message
-    return str(exc)
+    return "Google API request failed"
 
 
-def _build_metadata(*, exc: HttpError, status_code: int | None, error_payload: dict[str, Any]) -> dict[str, Any]:
+def _build_metadata(
+    *, exc: HttpError, status_code: int | None, error_payload: dict[str, Any]
+) -> dict[str, Any]:
     metadata: dict[str, Any] = {
         "provider": "google",
         "provider_status_code": status_code,
@@ -212,10 +212,6 @@ def _build_metadata(*, exc: HttpError, status_code: int | None, error_payload: d
 
     error = error_payload.get("error")
     if isinstance(error, dict):
-        message = error.get("message")
-        if isinstance(message, str) and message:
-            metadata["provider_message"] = message
-
         code = _coerce_int(error.get("code"))
         if code is not None:
             metadata["provider_error_code"] = code
@@ -226,16 +222,25 @@ def _build_metadata(*, exc: HttpError, status_code: int | None, error_payload: d
             if first_error:
                 reason = first_error.get("reason")
                 if isinstance(reason, str) and reason:
-                    metadata["provider_reason"] = reason
+                    metadata["provider_reason"] = (
+                        reason
+                        if reason.lower()
+                        in (
+                            _RATE_LIMIT_REASONS
+                            | _AUTH_REASONS
+                            | _PERMISSION_REASONS
+                            | _NOT_FOUND_REASONS
+                            | _CONFLICT_REASONS
+                            | _PRECONDITION_REASONS
+                            | _TEMPORARY_REASONS
+                        )
+                        else "other"
+                    )
                 domain = first_error.get("domain")
                 if isinstance(domain, str) and domain:
-                    metadata["provider_domain"] = domain
-                location = first_error.get("location")
-                if isinstance(location, str) and location:
-                    metadata["provider_location"] = location
-                location_type = first_error.get("locationType")
-                if isinstance(location_type, str) and location_type:
-                    metadata["provider_location_type"] = location_type
+                    metadata["provider_domain"] = (
+                        domain if domain in {"global", "usageLimits"} else "other"
+                    )
 
     retry_after_seconds = _extract_retry_after_seconds(exc)
     if retry_after_seconds is not None:
@@ -250,14 +255,6 @@ def _extract_retry_after_seconds(exc: HttpError) -> int | None:
     retry_after = None
     if hasattr(resp, "get"):
         retry_after = resp.get("retry-after") or resp.get("Retry-After")
-    if retry_after is None and hasattr(resp, "__contains__"):
-        for key in ("retry-after", "Retry-After"):
-            try:
-                if key in resp:
-                    retry_after = resp[key]
-                    break
-            except Exception:
-                continue
     return _coerce_int(retry_after)
 
 
@@ -288,7 +285,7 @@ def _compute_retry_delay_seconds(
     if mapped_error.metadata:
         retry_after_seconds = _coerce_int(mapped_error.metadata.get("retry_after_seconds"))
     if retry_after_seconds is not None and retry_after_seconds > 0:
-        return min(float(retry_after_seconds), max_delay_seconds)
+        return float(retry_after_seconds)
 
     bounded_base = max(base_delay_seconds, 0.0)
     bounded_cap = max(max_delay_seconds, bounded_base if bounded_base > 0 else 0.0)

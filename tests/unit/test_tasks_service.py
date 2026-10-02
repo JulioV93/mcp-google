@@ -10,11 +10,10 @@ from app.config import Settings
 from app.db.base import Base
 from app.schemas.tasks import (
     TaskInput,
+    TasksCompleteTaskInput,
     TasksConfirmDeleteTaskInput,
     TasksConfirmDeleteTasklistInput,
-    TasksCompleteTaskInput,
     TasksCreateTaskInput,
-    TasksCreateTasklistInput,
     TasksDeleteTaskInput,
     TasksDeleteTasklistInput,
     TasksListTasklistsInput,
@@ -23,9 +22,13 @@ from app.services.tasks_service import TasksService
 
 
 def create_test_session() -> Session:
-    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:", future=True, connect_args={"check_same_thread": False}
+    )
     Base.metadata.create_all(engine)
-    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, expire_on_commit=False
+    )
     return session_factory()
 
 
@@ -75,7 +78,11 @@ def test_create_task_serializes_task_payload() -> None:
 
     assert result["id"] == "task-1"
     assert result["tasklist_id"] == "list-1"
-    assert result["resource_identity"] == {"type": "task", "tasklist_id": "list-1", "task_id": "task-1"}
+    assert result["resource_identity"] == {
+        "type": "task",
+        "tasklist_id": "list-1",
+        "task_id": "task-1",
+    }
     service.client.create_task.assert_called_once()
 
 

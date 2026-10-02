@@ -3,9 +3,9 @@ from __future__ import annotations
 from fastmcp import FastMCP
 
 from app.schemas.tasks import (
+    TasksCompleteTaskInput,
     TasksConfirmDeleteTaskInput,
     TasksConfirmDeleteTasklistInput,
-    TasksCompleteTaskInput,
     TasksCreateTaskInput,
     TasksCreateTasklistInput,
     TasksDeleteTaskInput,
@@ -21,7 +21,9 @@ from app.tools.common import run_tool
 
 def register_tasks_tools(mcp: FastMCP) -> None:
     @mcp.tool
-    def tasks_list_tasklists(max_results: int = 100, page_token: str | None = None) -> dict[str, object]:
+    def tasks_list_tasklists(
+        max_results: int = 100, page_token: str | None = None
+    ) -> dict[str, object]:
         """List Google task lists for the current user.
 
         Use this first when the user names a list but you do not yet know its `tasklist_id`.
@@ -154,7 +156,9 @@ def register_tasks_tools(mcp: FastMCP) -> None:
         )
 
     @mcp.tool
-    def tasks_create_task(tasklist_id: str, task: dict[str, object] | None = None) -> dict[str, object]:
+    def tasks_create_task(
+        tasklist_id: str, task: dict[str, object] | None = None
+    ) -> dict[str, object]:
         """Create a Google task.
 
         Use for new tasks with title, notes, or due date.
@@ -170,7 +174,9 @@ def register_tasks_tools(mcp: FastMCP) -> None:
         }
         ```
         """
-        payload = TasksCreateTaskInput.model_validate({"tasklist_id": tasklist_id, "task": task or {}})
+        payload = TasksCreateTaskInput.model_validate(
+            {"tasklist_id": tasklist_id, "task": task or {}}
+        )
         return run_tool(
             tool_name="tasks_create_task",
             provider="google",
@@ -184,7 +190,9 @@ def register_tasks_tools(mcp: FastMCP) -> None:
         )
 
     @mcp.tool
-    def tasks_update_task(tasklist_id: str, task_id: str, task: dict[str, object] | None = None) -> dict[str, object]:
+    def tasks_update_task(
+        tasklist_id: str, task_id: str, task: dict[str, object] | None = None
+    ) -> dict[str, object]:
         """Update a Google task.
 
         Use for changing task title, notes, or due date.
@@ -218,7 +226,9 @@ def register_tasks_tools(mcp: FastMCP) -> None:
         )
 
     @mcp.tool
-    def tasks_complete_task(tasklist_id: str, task_id: str, completed: str | None = None) -> dict[str, object]:
+    def tasks_complete_task(
+        tasklist_id: str, task_id: str, completed: str | None = None
+    ) -> dict[str, object]:
         """Mark a Google task as completed.
 
         Prefer this over `tasks_update_task` when the user intent is to finish or close a task.
@@ -231,7 +241,9 @@ def register_tasks_tools(mcp: FastMCP) -> None:
         }
         ```
         """
-        payload = TasksCompleteTaskInput(tasklist_id=tasklist_id, task_id=task_id, completed=completed)
+        payload = TasksCompleteTaskInput(
+            tasklist_id=tasklist_id, task_id=task_id, completed=completed
+        )
         return run_tool(
             tool_name="tasks_complete_task",
             provider="google",
