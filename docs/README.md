@@ -42,3 +42,5 @@ Este directorio separa la planificacion acordada para el servidor MCP multiusuar
 - `PostgreSQL`, cifrado de tokens y auditoria basica.
 
 - [21. Seguridad, recursos y migración](21-seguridad-recursos-y-migracion.md)
+
+- [Release de seguridad desplegado en el homelab](22-release-homelab-2026-10-01.md).
