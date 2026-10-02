@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from contextvars import Token as ContextToken
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,20 +14,20 @@ class RequestContext(BaseModel):
     issuer: str
     audience: str
     token_type: str = "jwt"
-    tenant_id: Optional[str] = None
-    email: Optional[str] = None
+    tenant_id: str | None = None
+    email: str | None = None
     approvals: tuple[str, ...] = ()
     claims: dict[str, object] = Field(default_factory=dict)
 
 
-_request_context: ContextVar[Optional[RequestContext]] = ContextVar("request_context", default=None)
+_request_context: ContextVar[RequestContext | None] = ContextVar("request_context", default=None)
 
 
-def set_request_context(context: RequestContext) -> ContextToken[Optional[RequestContext]]:
+def set_request_context(context: RequestContext) -> ContextToken[RequestContext | None]:
     return _request_context.set(context)
 
 
-def reset_request_context(token: ContextToken[Optional[RequestContext]]) -> None:
+def reset_request_context(token: ContextToken[RequestContext | None]) -> None:
     _request_context.reset(token)
 
 
@@ -39,5 +38,5 @@ def get_request_context() -> RequestContext:
     return context
 
 
-def maybe_get_request_context() -> Optional[RequestContext]:
+def maybe_get_request_context() -> RequestContext | None:
     return _request_context.get()

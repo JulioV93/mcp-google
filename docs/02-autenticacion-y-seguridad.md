@@ -15,7 +15,7 @@ Ambos deben mantenerse separados para que el servidor pueda identificar de forma
 
 - El cliente se autentica con `Bearer JWT`.
 - El servidor valida firma, `iss`, `aud` y expiracion.
-- La identidad del usuario se toma del claim `sub`.
+- La identidad es `(tenant_id, sub)`; ausencia de tenant usa un espacio independiente. No se actualiza un tenant existente por recibir otro JWT.
 
 ### Claims minimos esperados
 
@@ -36,11 +36,9 @@ Ambos deben mantenerse separados para que el servidor pueda identificar de forma
 
 Nunca se debe aceptar `user_id`, `external_subject` o `google_email` desde los argumentos de una tool como selector de identidad. La identidad siempre se resuelve desde el JWT autenticado.
 
-### Aprobaciones explicitas para tools sensibles
+### Aprobaciones explícitas
 
-- El servidor puede exigir aprobacion explicita para tools de alto riesgo.
-- Cuando `REQUIRE_EXPLICIT_APPROVAL=true`, ciertas tools solo se ejecutan si el JWT del cliente incluye el claim `approved_tools` con el nombre exacto de la tool.
-- Esto permite que la plataforma de agentes controle aprobaciones sin exponer decisiones al LLM.
+En producción toda escritura requiere el nombre exacto de la herramienta en `approved_tools`, incluidas confirmaciones y desconexión HTTP/MCP. Una política incompleta impide arrancar. Preparaciones, lecturas e inicio OAuth no requieren aprobación adicional. La claim es autorización administrativa; no demuestra consentimiento humano ni sustituye la confirmación del payload.
 
 ## OAuth Google por usuario
 
@@ -61,7 +59,7 @@ Nunca se debe aceptar `user_id`, `external_subject` o `google_email` desde los a
 4. El servidor devuelve la URL de consentimiento Google.
 5. El usuario concede acceso.
 6. Google redirige al callback del servidor.
-7. El servidor valida `state` e intercambia `code` por tokens.
+7. El servidor consume `state` atómicamente antes de intercambiar `code` por tokens; un fallo requiere iniciar otro flujo.
 8. El servidor valida el ID token, incluyendo audiencia, clock skew y `email_verified`.
 9. Los tokens se guardan cifrados y se vinculan al usuario.
 
@@ -173,7 +171,9 @@ Errores contractuales sugeridos:
 
 ## Reintentos
 
-Solo reintentar en errores transitorios del proveedor:
+Solo las lecturas reintentan errores transitorios del proveedor. Las escrituras no se reenvían automáticamente. Un resultado incierto devuelve `google_operation_outcome_unknown`: verificar el recurso antes de preparar otra operación, y nunca repetir el `operation_id`.
+
+Errores transitorios de lectura:
 
 - `429`
 - `500`
@@ -207,3 +207,5 @@ No reintentar en:
 - `APPROVAL_REQUIRED_TOOLS`
 - `TOKEN_ENCRYPTION_KEY`
 - `GOOGLE_ID_TOKEN_CLOCK_SKEW_SECONDS`
+
+Ver [seguridad, recursos y migración](21-seguridad-recursos-y-migracion.md) para retención, cifrado de pendientes, límites y aplicación segura de la migración.

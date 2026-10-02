@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
 import secrets
+from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from app.db.models import OAuthState, User
@@ -41,3 +42,19 @@ class OAuthStateStore:
     def delete(self, state: OAuthState) -> None:
         self.session.delete(state)
         self.session.flush()
+
+    def consume(self, state_value: str) -> OAuthState | None:
+        state = self.get_valid(state_value)
+        if state is None or state.provider != "google":
+            return None
+        # Load identity before atomically consuming the state and releasing the transaction.
+        _ = state.user
+        result = self.session.execute(
+            delete(OAuthState).where(
+                OAuthState.id == state.id,
+                OAuthState.expires_at > datetime.now(UTC),
+            ),
+            execution_options={"synchronize_session": False},
+        )
+        self.session.commit()
+        return state if result.rowcount == 1 else None

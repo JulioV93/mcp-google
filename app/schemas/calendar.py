@@ -19,7 +19,7 @@ class CalendarEventDateTime(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_presence(self) -> "CalendarEventDateTime":
+    def validate_presence(self) -> CalendarEventDateTime:
         if not self.date_time and not self.date:
             raise ValueError("Either dateTime or date is required")
         return self
@@ -29,7 +29,9 @@ class CalendarEventReminderOverride(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     method: str = Field(pattern="^(email|popup)$", description="Reminder delivery method.")
-    minutes: int = Field(ge=0, description="Minutes before the event when the reminder should fire.")
+    minutes: int = Field(
+        ge=0, description="Minutes before the event when the reminder should fire."
+    )
 
 
 class CalendarEventReminders(BaseModel):
@@ -52,7 +54,9 @@ class CalendarEventInput(BaseModel):
     summary: str = Field(description="Human-readable event title.")
     description: str | None = Field(default=None, description="Optional event body or notes.")
     location: str | None = Field(default=None, description="Optional event location.")
-    color_id: str | None = Field(default=None, alias="colorId", description="Google Calendar color ID.")
+    color_id: str | None = Field(
+        default=None, alias="colorId", description="Google Calendar color ID."
+    )
     start: CalendarEventDateTime
     end: CalendarEventDateTime
     recurrence: list[str] | None = Field(
@@ -71,7 +75,7 @@ class CalendarListEventsInput(BaseModel):
     calendar_id: str = "primary"
     time_min: str | None = None
     time_max: str | None = None
-    max_results: int = 20
+    max_results: int = Field(default=20, ge=1, le=2500)
     page_token: str | None = None
     query: str | None = None
 

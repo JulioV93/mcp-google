@@ -11,14 +11,16 @@ class GmailRecipientMessageInput(BaseModel):
     body_text: str = Field(min_length=1, description="Plain-text email body.")
     cc: list[EmailStr] | None = Field(default=None, description="Optional CC recipients.")
     bcc: list[EmailStr] | None = Field(default=None, description="Optional BCC recipients.")
-    thread_id: str | None = Field(default=None, description="Optional Gmail thread ID for conversation continuity.")
+    thread_id: str | None = Field(
+        default=None, description="Optional Gmail thread ID for conversation continuity."
+    )
 
 
 class GmailListMessagesInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query: str | None = None
-    max_results: int = 20
+    max_results: int = Field(default=20, ge=1, le=500)
     page_token: str | None = None
 
 
@@ -32,7 +34,7 @@ class GmailListThreadsInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query: str | None = None
-    max_results: int = 20
+    max_results: int = Field(default=20, ge=1, le=500)
     page_token: str | None = None
 
 

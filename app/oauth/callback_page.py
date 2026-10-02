@@ -2,7 +2,6 @@ from html import escape
 
 from starlette.responses import HTMLResponse
 
-
 RESULTS = {
     "connected": (
         "Tu cuenta de Google está conectada",
@@ -91,12 +90,16 @@ def callback_page(result: str, *, status_code: int = 200, email: str | None = No
   </main>
 </body>
 </html>"""
-    return HTMLResponse(html, status_code=status_code, headers={
-        "Cache-Control": "no-store",
-        "Referrer-Policy": "no-referrer",
-        "X-Content-Type-Options": "nosniff",
-        "Content-Security-Policy": (
-            "default-src 'none'; style-src 'unsafe-inline'; "
-            "base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
-        ),
-    })
+    return HTMLResponse(
+        html,
+        status_code=status_code,
+        headers={
+            "Cache-Control": "no-store",
+            "Referrer-Policy": "no-referrer",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": (
+                "default-src 'none'; style-src 'unsafe-inline'; "
+                "base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+            ),
+        },
+    )

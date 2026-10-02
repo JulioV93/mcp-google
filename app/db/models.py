@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, UniqueConstraint, func
@@ -26,8 +27,14 @@ class User(TimestampMixin, Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    external_subject: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    external_subject: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(255), nullable=False, default="", server_default="", index=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "external_subject", name="uq_users_tenant_subject"),
+    )
 
     google_connection: Mapped[GoogleConnection | None] = relationship(
         back_populates="user",
@@ -75,7 +82,9 @@ class OAuthState(Base):
     state: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     code_verifier: Mapped[str] = mapped_column(Text, nullable=False)
     requested_scopes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -93,13 +102,16 @@ class AuditLog(Base):
     tool_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
     resource_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    arguments_redacted: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    arguments_redacted: Mapped[dict[str, object]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     result_status: Mapped[str] = mapped_column(String(50), nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
+        index=True,
     )
 
     user: Mapped[User] = relationship(back_populates="audit_logs")
@@ -109,17 +121,36 @@ class PendingGoogleOperation(TimestampMixin, Base):
     __tablename__ = "pending_google_operations"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
     operation_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     operation_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     resource_type: Mapped[str] = mapped_column(String(100), nullable=False)
     resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     resource_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    payload_normalized: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    payload_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    @property
+    def payload_normalized(self) -> dict[str, object]:
+        from app.security.encryption import decrypt_text
+
+        return json.loads(decrypt_text(self.payload_encrypted)) if self.payload_encrypted else {}
+
+    @payload_normalized.setter
+    def payload_normalized(self, value: dict[str, object]) -> None:
+        from app.security.encryption import encrypt_text
+
+        self.payload_encrypted = encrypt_text(
+            json.dumps(value, sort_keys=True, separators=(",", ":"))
+        )
+
     payload_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending", index=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="pending_google_operations")

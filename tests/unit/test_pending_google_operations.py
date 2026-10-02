@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -12,7 +12,9 @@ from app.services.pending_operations import _preview_from_record
 
 
 def test_repository_creates_and_confirms_operation() -> None:
-    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:", future=True, connect_args={"check_same_thread": False}
+    )
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)()
 
@@ -29,7 +31,7 @@ def test_repository_creates_and_confirms_operation() -> None:
         resource_type="drive_file",
         payload_normalized={"name": "notes.txt"},
         payload_hash="hash-1",
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+        expires_at=datetime.now(UTC) + timedelta(minutes=10),
         resource_name="notes.txt",
     )
     session.commit()
@@ -46,7 +48,9 @@ def test_repository_creates_and_confirms_operation() -> None:
 
 
 def test_preview_from_record_contains_next_action_and_identity() -> None:
-    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:", future=True, connect_args={"check_same_thread": False}
+    )
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)()
 
@@ -63,7 +67,7 @@ def test_preview_from_record_contains_next_action_and_identity() -> None:
         resource_type="calendar_event",
         payload_normalized={"calendar_id": "primary", "event_id": "evt-1"},
         payload_hash="hash-2",
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+        expires_at=datetime.now(UTC) + timedelta(minutes=10),
         resource_id="evt-1",
         resource_name="Trading block",
     )

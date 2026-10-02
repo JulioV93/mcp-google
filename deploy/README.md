@@ -44,8 +44,8 @@ la base sigue conteniendo otros datos privados y debe protegerse y respaldarse.
 La utilidad `scripts/homelab_credentials.py` permite inicializar las claves que
 faltan y emitir JWT en archivos 600. Por defecto duran una hora; con
 `JWT_ALLOW_NON_EXPIRING_TOKENS=true`, se emiten y aceptan sin vencimiento. No rota
-claves existentes,
-no imprime tokens ni incluye `approved_tools`. El smoke test admite `--token-file`
+claves existentes ni imprime tokens. Sólo incluye `approved_tools` si se solicita
+mediante `--approve-tool`. El smoke test admite `--token-file`
 para evitar pasar credenciales en argumentos visibles de procesos.
 
 ### JWT sin vencimiento durante la marcha blanca
@@ -147,7 +147,9 @@ Referencias oficiales:
 1. Confirmar SSH, hostname/SO/arquitectura, usuario, espacio, memoria, reloj/NTP,
    puerto 8000 libre, Docker/Compose y forma de ejecución de cloudflared.
 2. Preparar carpeta, compose, `.env`, claves locales y `data/` protegidos.
-3. Descargar imagen por digest y ejecutar `alembic upgrade head` con el mismo bind
+3. Para actualizar: respaldar base, `.env` y compose; detener el contenedor antes de migrar.
+   Revisar tenants y seguir [la guía de seguridad y migración](../docs/21-seguridad-recursos-y-migracion.md).
+   Descargar imagen por digest y ejecutar `alembic upgrade head` con el mismo bind
    de datos y configuración que el contenedor definitivo, antes de arrancarlo.
 4. Arrancar y verificar localmente `/health`, rechazo sin JWT, initialize/list/ping.
 5. Sólo después modificar el túnel EXISTENTE, con una ruta sin filtro de path:
@@ -173,7 +175,7 @@ consume state; también lo invalida al cancelar. Los access logs Uvicorn están
 Ejecutar `python -m pytest -q` en un entorno con `.[dev]`; los tests crean su propia
 SQLite y claves ficticias y no dependen del `.env` real.
 
-- JWT: inválido, vencido, firma/emisor/audiencia incorrectos o sin sub/iss/aud/exp.
+- JWT: inválido, vencido, firma/emisor/audiencia incorrectos o sin sub/iss/aud; sin exp sólo con marcha blanca activa.
 - Callback: éxito, error, cancelación, parámetros faltantes, expiración y reutilización.
 - HTML: escape de email, móvil/escritorio, sin recursos externos ni excepciones visibles.
 - Dos identidades: estado y credenciales aislados; escritura bloqueada sin aprobación.

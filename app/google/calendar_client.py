@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from googleapiclient.discovery import build
 from sqlalchemy.orm import Session
 
 from app.config import Settings
@@ -12,13 +11,13 @@ class CalendarClient(GoogleApiClientBase):
         super().__init__(session, settings)
 
     def _service(self, *, external_subject: str, tenant_id: str | None = None):
-        credentials = self.credentials_provider.get_for_user(
-            external_subject=external_subject,
-            tenant_id=tenant_id,
+        return self._get_service(
+            "calendar", "v3", external_subject=external_subject, tenant_id=tenant_id
         )
-        return build("calendar", "v3", credentials=credentials, cache_discovery=False)
 
-    def list_calendars(self, *, external_subject: str, tenant_id: str | None = None) -> dict[str, object]:
+    def list_calendars(
+        self, *, external_subject: str, tenant_id: str | None = None
+    ) -> dict[str, object]:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
         return self._execute(service.calendarList().list())
 
@@ -100,4 +99,6 @@ class CalendarClient(GoogleApiClientBase):
         tenant_id: str | None = None,
     ) -> None:
         service = self._service(external_subject=external_subject, tenant_id=tenant_id)
-        self._execute(service.events().delete(calendarId=calendar_id, eventId=event_id, sendUpdates="none"))
+        self._execute(
+            service.events().delete(calendarId=calendar_id, eventId=event_id, sendUpdates="none")
+        )

@@ -22,9 +22,13 @@ from app.services.gmail_service import GmailService
 
 
 def create_test_session() -> Session:
-    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:", future=True, connect_args={"check_same_thread": False}
+    )
     Base.metadata.create_all(engine)
-    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, expire_on_commit=False
+    )
     return session_factory()
 
 
@@ -179,7 +183,11 @@ def test_send_and_trash_message_return_expected_shape() -> None:
         "message_id": "msg-sent",
         "thread_id": "thr-sent",
         "label_ids": ["TRASH"],
-        "resource_identity": {"type": "gmail_message", "message_id": "msg-sent", "thread_id": "thr-sent"},
+        "resource_identity": {
+            "type": "gmail_message",
+            "message_id": "msg-sent",
+            "thread_id": "thr-sent",
+        },
         "human_summary": "Moved Gmail message 'msg-sent' to trash.",
         "next_suggested_actions": ["gmail_list_messages", "gmail_list_threads"],
         "safety_level": "destructive",

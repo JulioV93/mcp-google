@@ -98,7 +98,9 @@ def register_calendar_tools(mcp: FastMCP) -> None:
         )
 
     @mcp.tool
-    def calendar_create_event(calendar_id: str = "primary", event: dict[str, object] | None = None) -> dict[str, object]:
+    def calendar_create_event(
+        calendar_id: str = "primary", event: dict[str, object] | None = None
+    ) -> dict[str, object]:
         """Create a Google Calendar event.
 
         Use for both one-off and recurring events.
@@ -122,7 +124,9 @@ def register_calendar_tools(mcp: FastMCP) -> None:
         }
         ```
         """
-        payload = CalendarCreateEventInput.model_validate({"calendar_id": calendar_id, "event": event or {}})
+        payload = CalendarCreateEventInput.model_validate(
+            {"calendar_id": calendar_id, "event": event or {}}
+        )
         return run_tool(
             tool_name="calendar_create_event",
             provider="google",
@@ -175,7 +179,9 @@ def register_calendar_tools(mcp: FastMCP) -> None:
         )
 
     @mcp.tool
-    def calendar_delete_event(calendar_id: str = "primary", event_id: str = "") -> dict[str, object]:
+    def calendar_delete_event(
+        calendar_id: str = "primary", event_id: str = ""
+    ) -> dict[str, object]:
         """Prepare deletion of a Google Calendar event.
 
         This does not delete immediately. It returns an operation preview and `operation_id`.

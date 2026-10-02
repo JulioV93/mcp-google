@@ -1,18 +1,16 @@
 from __future__ import annotations
 
+import os
 from contextlib import contextmanager
 from dataclasses import dataclass
-import os
 from typing import Any, cast
 from urllib.parse import urlparse
 
-from google.auth.transport.requests import Request as GoogleAuthRequest
+from google.oauth2 import credentials as google_credentials
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
-from google.oauth2 import credentials as google_credentials
 
 from app.config import Settings, get_settings
-
 
 GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
 GOOGLE_AUTH_URI = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -104,13 +102,19 @@ def exchange_code(
     settings: Settings | None = None,
 ) -> GoogleOAuthTokens:
     flow = create_flow(state=state, code_verifier=code_verifier, settings=settings)
-    fetch_kwargs: dict[str, object] = {"include_client_id": True}
+    fetch_kwargs: dict[str, object] = {
+        "include_client_id": True,
+        "timeout": (settings or get_settings()).google_api_timeout_seconds,
+    }
     if authorization_response is not None:
         fetch_kwargs["authorization_response"] = authorization_response
     else:
         fetch_kwargs["code"] = code
-    with allow_insecure_transport_for_local_dev(settings):
-        flow.fetch_token(**fetch_kwargs)
+    try:
+        with allow_insecure_transport_for_local_dev(settings):
+            flow.fetch_token(**fetch_kwargs)
+    finally:
+        flow.oauth2session.close()
     credentials = cast(Credentials, flow.credentials)
     credential_data = cast(Any, credentials)
     id_token = credential_data.id_token if hasattr(credential_data, "id_token") else None
@@ -142,8 +146,3 @@ def build_user_credentials(
         client_secret=current_settings.google_client_secret,
         scopes=scopes,
     )
-
-
-def refresh_user_credentials(credentials: google_credentials.Credentials) -> google_credentials.Credentials:
-    credentials.refresh(GoogleAuthRequest())
-    return credentials

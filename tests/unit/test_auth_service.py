@@ -1,23 +1,27 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from google.auth.exceptions import RefreshError as GoogleRefreshError
 from unittest.mock import patch
 
+from google.auth.exceptions import RefreshError as GoogleRefreshError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.base import Base
 from app.db.models import GoogleConnection
-from app.errors import ConfigurationError
-from app.services.auth_service import AuthService
+from app.errors import AuthenticationProviderError, ConfigurationError
 from app.security.encryption import decrypt_text, encrypt_text
+from app.services.auth_service import AuthService
 
 
 def create_test_session() -> Session:
-    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:", future=True, connect_args={"check_same_thread": False}
+    )
     Base.metadata.create_all(engine)
-    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, expire_on_commit=False
+    )
     return session_factory()
 
 
@@ -32,6 +36,7 @@ def test_encrypt_roundtrip_works_with_local_key() -> None:
 def test_begin_google_auth_requires_google_credentials() -> None:
     session = create_test_session()
     service = AuthService(session)
+    service.settings = service.settings.model_copy()
     service.settings.google_client_id = ""
     service.settings.google_client_secret = ""
 
@@ -40,7 +45,9 @@ def test_begin_google_auth_requires_google_credentials() -> None:
     except ConfigurationError as exc:
         assert "client credentials" in exc.detail
     else:
-        raise AssertionError("Expected ConfigurationError when Google OAuth credentials are missing")
+        raise AssertionError(
+            "Expected ConfigurationError when Google OAuth credentials are missing"
+        )
 
 
 def test_google_status_is_empty_without_connection() -> None:
@@ -87,7 +94,9 @@ def test_get_google_credentials_normalizes_aware_expiry_from_database() -> None:
     request_cls.assert_not_called()
 
 
-def test_get_google_credentials_marks_connection_reauth_required_when_refresh_token_is_invalid() -> None:
+def test_get_google_credentials_marks_connection_reauth_required_when_refresh_token_is_invalid() -> (
+    None
+):
     session = create_test_session()
     service = AuthService(session)
 
@@ -115,17 +124,18 @@ def test_get_google_credentials_marks_connection_reauth_required_when_refresh_to
     ):
         try:
             service.get_google_credentials_for_user(external_subject="user-4")
-        except Exception as exc:
+        except AuthenticationProviderError as exc:
             assert getattr(exc, "code", None) == "google_consent_required"
             assert "reconnect Google auth" in getattr(exc, "detail", "")
             assert exc.metadata == {
                 "provider": "google",
                 "connection_status": "reauth_required",
                 "error": "invalid_grant",
-                "error_description": "Bad Request",
             }
         else:
-            raise AssertionError("Expected google_consent_required when Google refresh token is invalid")
+            raise AssertionError(
+                "Expected google_consent_required when Google refresh token is invalid"
+            )
 
     connection = service.connections.get_google_connection(user=user)
     assert connection is not None
@@ -154,14 +164,16 @@ def test_get_google_credentials_rejects_non_active_connection_before_refresh() -
     with patch("google.oauth2.credentials.Credentials.refresh") as refresh_mock:
         try:
             service.get_google_credentials_for_user(external_subject="user-5")
-        except Exception as exc:
+        except AuthenticationProviderError as exc:
             assert getattr(exc, "code", None) == "google_consent_required"
             assert exc.metadata == {
                 "provider": "google",
                 "connection_status": "reauth_required",
             }
         else:
-            raise AssertionError("Expected google_consent_required for non-active Google connection")
+            raise AssertionError(
+                "Expected google_consent_required for non-active Google connection"
+            )
 
     refresh_mock.assert_not_called()
 
@@ -189,5 +201,11 @@ def test_google_status_describes_reauth_required_state() -> None:
 
     assert result.connected is False
     assert result.status == "reauth_required"
-    assert result.status_detail == "Google authorization expired or was revoked; reconnection is required."
-    assert result.recommended_action == "Run auth_google_begin to reconnect Google auth, then retry the request."
+    assert (
+        result.status_detail
+        == "Google authorization expired or was revoked; reconnection is required."
+    )
+    assert (
+        result.recommended_action
+        == "Run auth_google_begin to reconnect Google auth, then retry the request."
+    )

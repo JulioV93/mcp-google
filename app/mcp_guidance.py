@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from fastmcp import FastMCP
 
-
 OVERVIEW_URI = "google-mcp://guide/overview"
 SAFETY_URI = "google-mcp://guide/safety"
 ERRORS_URI = "google-mcp://guide/error-handling"
@@ -47,6 +46,9 @@ Safety principles:
 - treat Gmail trash as a mutation even though it is reversible
 - search Drive before mutating when the user did not provide a file ID
 - Drive prepare_* tools do not execute mutations; confirm_* tools do
+- production writes require the exact tool in the signed approved_tools claim
+- preparation is not proof of human consent
+- never repeat an operation with an uncertain external outcome
 
 High-risk operations:
 - calendar_delete_event
@@ -83,7 +85,9 @@ How to react:
 - google_consent_required: reconnect Google auth, then retry
 - insufficient_scope: reconnect with broader scopes, do not retry unchanged
 - resource_not_found: refresh list or search results before retrying
-- provider_temporary_error: retry with backoff
+- provider_temporary_error: retry reads with backoff
+- google_operation_outcome_unknown: inspect the Google resource; never repeat operation_id or automatically prepare another write
+- auth_provider_unavailable: wait for the JWT key provider; do not bypass authentication
 - internal_error: stop and report the server problem
 
 Domain-specific recovery:

@@ -4,7 +4,6 @@ from starlette.testclient import TestClient
 
 from app.factory import create_app
 from app.security.jwt_auth import build_request_context
-from app.tools.common import run_tool
 
 
 def test_mcp_rejects_disallowed_origin() -> None:

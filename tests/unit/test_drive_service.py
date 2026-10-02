@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
 import pytest
@@ -21,13 +21,13 @@ from app.schemas.drive import (
     DriveFindFolderByNameInput,
     DriveInlineContentInput,
     DriveListFilesInput,
+    DrivePermissionInput,
     DrivePrepareDeleteFileInput,
     DrivePrepareSaveFileInput,
     DrivePrepareShareFileInput,
+    DrivePrepareUploadInput,
     DrivePrepareWriteGoogleDocInput,
     DrivePrepareWriteGoogleSheetInput,
-    DrivePrepareUploadInput,
-    DrivePermissionInput,
     DriveSearchFilesAdvancedInput,
 )
 from app.services.drive_service import DriveService
@@ -56,9 +56,13 @@ def test_list_files_normalizes_shortcut_target_id() -> None:
 
 
 def create_test_session() -> Session:
-    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:", future=True, connect_args={"check_same_thread": False}
+    )
     Base.metadata.create_all(engine)
-    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    session_factory = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, expire_on_commit=False
+    )
     return session_factory()
 
 
@@ -175,7 +179,9 @@ def test_find_file_by_name_maps_high_level_file_type() -> None:
     assert isinstance(best_match, dict)
     assert best_match["file_type"] == "doc"
     queries = [call.kwargs.get("query") for call in service.client.list_files.call_args_list]
-    assert any("mimeType = 'application/vnd.google-apps.document'" in str(query) for query in queries)
+    assert any(
+        "mimeType = 'application/vnd.google-apps.document'" in str(query) for query in queries
+    )
 
 
 def test_find_file_by_name_marks_multiple_when_top_results_are_close() -> None:
@@ -365,7 +371,9 @@ def test_prepare_and_confirm_write_google_doc_flow() -> None:
 
     prepare = service.prepare_write_google_doc(
         external_subject="user-1",
-        input_data=DrivePrepareWriteGoogleDocInput(file_id="doc-1", content_text="Hola mundo", mode="replace"),
+        input_data=DrivePrepareWriteGoogleDocInput(
+            file_id="doc-1", content_text="Hola mundo", mode="replace"
+        ),
     )
 
     operation_id = str(prepare["operation_id"])
@@ -572,7 +580,9 @@ def test_confirm_share_creates_permission() -> None:
         external_subject="user-1",
         input_data=DrivePrepareShareFileInput(
             file_id="file-9",
-            permission=DrivePermissionInput(type="user", role="writer", email_address="team@example.com"),
+            permission=DrivePermissionInput(
+                type="user", role="writer", email_address="team@example.com"
+            ),
         ),
     )
     operation_id = str(prepare["operation_id"])
@@ -602,7 +612,7 @@ def test_expired_operation_is_rejected() -> None:
     operation_id = str(prepare["operation_id"])
     record = service.pending_operations.get_by_operation_key(operation_id)
     assert record is not None
-    record.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    record.expires_at = datetime.now(UTC) - timedelta(minutes=1)
     session.commit()
 
     with pytest.raises(DriveOperationExpiredError):

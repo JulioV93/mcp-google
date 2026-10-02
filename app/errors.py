@@ -175,7 +175,9 @@ class TemporaryProviderError(ProviderError):
 
 
 class InternalError(AppError):
-    def __init__(self, detail: str = "Internal server error", *, metadata: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self, detail: str = "Internal server error", *, metadata: dict[str, Any] | None = None
+    ) -> None:
         super().__init__(
             "internal_error",
             detail,
@@ -370,4 +372,16 @@ class OriginNotAllowedError(AppError):
             status_code=403,
             retryable=False,
             category="security",
+        )
+
+
+class OperationOutcomeUnknownError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            "google_operation_outcome_unknown",
+            "The external result is uncertain; verify the resource before preparing another operation",
+            status_code=409,
+            retryable=False,
+            category="provider",
+            hint="Do not repeat this operation_id. Inspect the Google resource first.",
         )

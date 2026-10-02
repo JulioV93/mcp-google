@@ -36,7 +36,9 @@ def register_gmail_tools(mcp: FastMCP) -> None:
         }
         ```
         """
-        payload = GmailListMessagesInput(query=query, max_results=max_results, page_token=page_token)
+        payload = GmailListMessagesInput(
+            query=query, max_results=max_results, page_token=page_token
+        )
         return run_tool(
             tool_name="gmail_list_messages",
             provider="google",
@@ -123,12 +125,16 @@ def register_gmail_tools(mcp: FastMCP) -> None:
         )
 
     @mcp.tool
-    def gmail_update_draft(draft_id: str, message: dict[str, object] | None = None) -> dict[str, object]:
+    def gmail_update_draft(
+        draft_id: str, message: dict[str, object] | None = None
+    ) -> dict[str, object]:
         """Update a Gmail draft.
 
         Use to revise an existing draft by ID before sending.
         """
-        payload = GmailUpdateDraftInput.model_validate({"draft_id": draft_id, "message": message or {}})
+        payload = GmailUpdateDraftInput.model_validate(
+            {"draft_id": draft_id, "message": message or {}}
+        )
         return run_tool(
             tool_name="gmail_update_draft",
             provider="google",

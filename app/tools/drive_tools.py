@@ -19,11 +19,11 @@ from app.schemas.drive import (
     DrivePrepareRevokePermissionInput,
     DrivePrepareSaveFileInput,
     DrivePrepareShareFileInput,
+    DrivePrepareUploadInput,
     DrivePrepareWriteGoogleDocInput,
     DrivePrepareWriteGoogleSheetInput,
-    DrivePrepareUploadInput,
-    DriveSearchFilesInput,
     DriveSearchFilesAdvancedInput,
+    DriveSearchFilesInput,
     DriveUpdateMetadataInput,
 )
 from app.services.drive_service import DriveService
@@ -409,12 +409,16 @@ def register_drive_tools(mcp: FastMCP) -> None:
         )
 
     @mcp.tool
-    def drive_create_shortcut(name: str, target_file_id: str, parent_id: str | None = None) -> dict[str, object]:
+    def drive_create_shortcut(
+        name: str, target_file_id: str, parent_id: str | None = None
+    ) -> dict[str, object]:
         """Create a Drive shortcut.
 
         Use when the user wants another folder entry pointing at an existing file.
         """
-        payload = DriveCreateShortcutInput(name=name, target_file_id=target_file_id, parent_id=parent_id)
+        payload = DriveCreateShortcutInput(
+            name=name, target_file_id=target_file_id, parent_id=parent_id
+        )
         return run_tool(
             tool_name="drive_create_shortcut",
             provider="google",
@@ -461,7 +465,9 @@ def register_drive_tools(mcp: FastMCP) -> None:
         Use only when you know the file ID and parent changes.
         Search first if the file identity is uncertain.
         """
-        payload = DriveMoveFileInput(file_id=file_id, add_parent_id=add_parent_id, remove_parent_id=remove_parent_id)
+        payload = DriveMoveFileInput(
+            file_id=file_id, add_parent_id=add_parent_id, remove_parent_id=remove_parent_id
+        )
         return run_tool(
             tool_name="drive_move_file",
             provider="google",
@@ -475,7 +481,9 @@ def register_drive_tools(mcp: FastMCP) -> None:
         )
 
     @mcp.tool
-    def drive_prepare_upload(name: str, content: dict[str, object], parent_id: str | None = None) -> dict[str, object]:
+    def drive_prepare_upload(
+        name: str, content: dict[str, object], parent_id: str | None = None
+    ) -> dict[str, object]:
         """Prepare a sensitive Drive upload operation.
 
         This does not upload yet. It creates a preview and operation_id for later confirmation.
@@ -491,7 +499,9 @@ def register_drive_tools(mcp: FastMCP) -> None:
         }
         ```
         """
-        payload = DrivePrepareUploadInput.model_validate({"name": name, "parent_id": parent_id, "content": content})
+        payload = DrivePrepareUploadInput.model_validate(
+            {"name": name, "parent_id": parent_id, "content": content}
+        )
         return run_tool(
             tool_name="drive_prepare_upload",
             provider="google",
@@ -550,7 +560,9 @@ def register_drive_tools(mcp: FastMCP) -> None:
         )
 
     @mcp.tool
-    def drive_prepare_write_google_doc(file_id: str, content_text: str, mode: str = "replace") -> dict[str, object]:
+    def drive_prepare_write_google_doc(
+        file_id: str, content_text: str, mode: str = "replace"
+    ) -> dict[str, object]:
         """Prepare writing text content into a native Google Doc.
 
         Use this instead of binary save when the target file is a Google Docs document.
@@ -564,7 +576,9 @@ def register_drive_tools(mcp: FastMCP) -> None:
         }
         ```
         """
-        payload = DrivePrepareWriteGoogleDocInput(file_id=file_id, content_text=content_text, mode=mode)
+        payload = DrivePrepareWriteGoogleDocInput(
+            file_id=file_id, content_text=content_text, mode=mode
+        )
         return run_tool(
             tool_name="drive_prepare_write_google_doc",
             provider="google",
@@ -657,7 +671,9 @@ def register_drive_tools(mcp: FastMCP) -> None:
         )
 
     @mcp.tool
-    def drive_prepare_upload_markdown(name: str, content_markdown: str, parent_id: str | None = None) -> dict[str, object]:
+    def drive_prepare_upload_markdown(
+        name: str, content_markdown: str, parent_id: str | None = None
+    ) -> dict[str, object]:
         """Prepare uploading a Markdown file directly to Drive.
 
         Use this when the user wants a `.md` file stored in Drive as a regular file.
@@ -747,7 +763,9 @@ def register_drive_tools(mcp: FastMCP) -> None:
 
         This does not share yet. It previews the permission change and returns an operation_id.
         """
-        payload = DrivePrepareShareFileInput.model_validate({"file_id": file_id, "permission": permission})
+        payload = DrivePrepareShareFileInput.model_validate(
+            {"file_id": file_id, "permission": permission}
+        )
         return run_tool(
             tool_name="drive_prepare_share_file",
             provider="google",

@@ -62,6 +62,17 @@ categories:
       - Reintentar ciegamente.
 
 errors:
+  google_operation_outcome_unknown:
+    category: provider
+    retryable: false
+    meaning: El efecto externo no se puede determinar con seguridad.
+    action:
+      - Inspeccionar el recurso Google y comunicar la incertidumbre.
+      - Preparar otra escritura solo tras verificar que sea necesaria.
+    do_not:
+      - Repetir operation_id.
+      - Preparar o reenviar automaticamente la misma escritura.
+
   validation_error:
     category: validation
     retryable: false
@@ -87,7 +98,7 @@ errors:
   approval_required:
     category: approval
     retryable: false
-    meaning: La tool requiere aprobacion humana.
+    meaning: La tool requiere autorizacion administrativa en approved_tools.
     action:
       - Solicitar aprobacion.
       - Reemitir JWT con approved_tools.
