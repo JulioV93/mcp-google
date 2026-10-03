@@ -36,9 +36,14 @@ categories:
     default_action: Corregir o renovar el bearer token.
     do_not:
       - Reintentar sin cambiar autenticacion.
+  authorization:
+    meaning: La identidad no tiene permiso persistente para esta accion.
+    default_action: Solicitar habilitacion administrativa del perfil en el servidor.
+    do_not:
+      - Pedir otro si por chat o renovar el JWT para intentar conceder permisos.
   approval:
-    meaning: La accion requiere aprobacion humana.
-    default_action: Solicitar aprobacion y reintentar solo con JWT actualizado.
+    meaning: Falta autorizacion administrativa en el modo heredado jwt_claims.
+    default_action: Solicitar un JWT con la herramienta autorizada al emisor.
     do_not:
       - Ejecutar una alternativa destructiva sin aprobacion.
   security:
@@ -62,6 +67,15 @@ categories:
       - Reintentar ciegamente.
 
 errors:
+  permission_denied:
+    category: authorization
+    retryable: false
+    meaning: Perfil read_only, disabled o herramienta no clasificada.
+    action:
+      - Solicitar al administrador habilitar el perfil de esta identidad.
+      - Reintentar con el mismo JWT solo despues de cambiar el permiso.
+    do_not:
+      - Pedir otra aprobacion conversacional o buscar herramientas alternativas.
   google_operation_outcome_unknown:
     category: provider
     retryable: false
@@ -98,7 +112,7 @@ errors:
   approval_required:
     category: approval
     retryable: false
-    meaning: La tool requiere autorizacion administrativa en approved_tools.
+    meaning: Solo jwt_claims requiere autorizacion administrativa en approved_tools.
     action:
       - Solicitar aprobacion.
       - Reemitir JWT con approved_tools.

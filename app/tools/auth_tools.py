@@ -3,12 +3,35 @@ from __future__ import annotations
 from fastmcp import FastMCP
 
 from app.config import Settings
+from app.security.authorization import permissions
+from app.security.tool_policy import tool_annotations
 from app.services.auth_service import AuthService
 from app.tools.common import run_tool
 
 
 def register_auth_tools(mcp: FastMCP, *, settings: Settings) -> None:
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("auth_get_permissions"))
+    def auth_get_permissions() -> dict[str, object]:
+        """Inspect your server permissions. Writes use the same JWT in server_policy mode.
+
+        An explicit, unambiguous user request can authorize a complete prepare/confirm flow.
+        Missing permissions require an administrator, not another chat approval.
+        """
+        return run_tool(
+            tool_name="auth_get_permissions",
+            provider="google",
+            resource_type="authorization",
+            arguments={},
+            operation=lambda session, context: permissions(
+                session,
+                settings=settings,
+                subject=context.subject,
+                tenant_id=context.tenant_id,
+                approved_tools=context.approvals,
+            ),
+        )
+
+    @mcp.tool(annotations=tool_annotations("auth_google_begin"))
     def auth_google_begin() -> dict[str, object]:
         """Start the Google OAuth connection flow for the current user."""
         return run_tool(
@@ -19,7 +42,7 @@ def register_auth_tools(mcp: FastMCP, *, settings: Settings) -> None:
             operation=lambda session, context: _auth_google_begin(session, context, settings),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("auth_google_status"))
     def auth_google_status() -> dict[str, object]:
         """Return the Google connection status for the current user."""
         return run_tool(
@@ -30,7 +53,7 @@ def register_auth_tools(mcp: FastMCP, *, settings: Settings) -> None:
             operation=lambda session, context: _auth_google_status(session, context, settings),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("auth_google_disconnect"))
     def auth_google_disconnect() -> dict[str, object]:
         """Disconnect the current user's Google account."""
         return run_tool(

@@ -25,6 +25,7 @@ from app.oauth.google_oauth import (
     exchange_code,
 )
 from app.oauth.state_store import OAuthStateStore
+from app.security.authorization import ensure_active_identity
 from app.security.encryption import decrypt_text, encrypt_text
 from app.services.connection_service import ConnectionService
 
@@ -92,6 +93,11 @@ class AuthService:
         if state_record is None or state_record.provider != "google":
             raise ValidationError("OAuth state is invalid or expired")
 
+        ensure_active_identity(
+            self.session,
+            subject=state_record.user.external_subject,
+            tenant_id=state_record.user.tenant_id or None,
+        )
         tokens = exchange_code(
             state=state_record.state,
             code=code,

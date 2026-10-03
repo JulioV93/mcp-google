@@ -1,5 +1,11 @@
 # Guia de desarrollo local
 
+> Configuración actual: [permisos persistentes](23-permisos-persistentes.md).
+> En `server_policy`, habilitar `read_write` una vez y conservar el JWT; `permission_denied`
+> requiere un cambio administrativo. Las instrucciones de `approved_tools`,
+> `approval_required` y las variables antiguas de aprobación de esta guía describen
+> exclusivamente el modo heredado `jwt_claims`. La confirmación de operaciones es técnica.
+
 ## Objetivo
 
 Esta guia explica como preparar el entorno local para trabajar en el servidor MCP, como levantar la app y como probar la base actual antes de continuar con mas funcionalidades.

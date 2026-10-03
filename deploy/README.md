@@ -95,11 +95,12 @@ gmail.compose, gmail.modify, drive, documents, spreadsheets, openid, userinfo.em
 | Drive | Crear carpetas/Docs/Sheets/Slides/atajos, metadata, mover, cargar, escribir, compartir, revocar y borrar |
 
 Drive admite borrado permanente tras confirmación. Contacts no está implementado.
-`REQUIRE_EXPLICIT_APPROVAL=true` usa por defecto la lista completa de escrituras de
-`app/config.py`; no configurar `APPROVAL_REQUIRED_TOOLS=` vacío. Una vista previa
-no es una autorización de escritura. Durante aceptación sólo se ejecutan lecturas.
-La aprobación se recibe mediante un claim firmado `approved_tools`, nunca por el
-consentimiento Google. No se conectan agentes en este despliegue.
+La plantilla usa `AUTHORIZATION_MODE=server_policy`: habilitar una vez el perfil
+`read_write` del usuario con `set-access`, conservando su JWT y conexión Google.
+La petición explícita puede autorizar el flujo de preparación/confirmación técnica.
+Consultar [permisos persistentes](../docs/23-permisos-persistentes.md) para migración,
+aceptación de escrituras sobre recursos de prueba y reversión. Los despliegues sin
+`AUTHORIZATION_MODE` conservan `jwt_claims` y las comprobaciones históricas.
 
 ## GCP: recorrido funcional
 

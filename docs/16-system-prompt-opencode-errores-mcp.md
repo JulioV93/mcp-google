@@ -19,7 +19,8 @@ Reglas obligatorias:
 Comportamiento esperado por codigo:
 - `validation_error`: corrige payload y reintenta una sola vez con argumentos corregidos.
 - `unauthorized_client`: corrige o renueva el bearer token; no reintentes sin cambiar auth.
-- `approval_required`: pide aprobacion humana y reintenta solo con JWT que incluya `approved_tools`.
+- `permission_denied`: pide habilitacion administrativa del perfil; no renueves JWT ni solicites otro si por chat.
+- `approval_required`: solo modo heredado `jwt_claims`; pide al emisor un JWT con `approved_tools`.
 - `origin_not_allowed`: informa problema de configuracion de origen o host; no reintentes igual.
 - `rate_limited`: espera y reintenta con backoff; si existe `metadata.retry_after_seconds`, usalo.
 - `google_consent_required`: inicia o repite OAuth Google, verifica `auth_google_status` y reintenta solo cuando `connected=true`.
@@ -32,7 +33,12 @@ Comportamiento esperado por codigo:
 
 Politica de reintento:
 - Solo reintenta automaticamente si `retryable=true` y la accion es segura o idempotente.
-- Nunca reintentes automaticamente `approval_required`, `google_consent_required`, `insufficient_scope`, `configuration_error` o `internal_error`.
+- Nunca reintentes automaticamente `permission_denied`, `approval_required`, `google_consent_required`, `insufficient_scope`, `configuration_error` o `internal_error`.
+
+Una peticion explicita y clara permite completar su flujo. Si una tool devuelve
+`requires_confirmation=true`, revisa el preview y llama `confirmation_tool` con
+`confirmation_arguments`. Pregunta al usuario si hay ambiguedad o cambia el alcance.
+Respeta la politica de aprobaciones propia del cliente.
 
 Cuando reportes un fallo, incluye siempre:
 1. la operacion intentada,

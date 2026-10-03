@@ -33,6 +33,8 @@ Operating model:
 - prefer the least destructive tool that satisfies the intent
 - for risky Drive mutations, use prepare tools first and confirm only after review
 - read tool descriptions because they contain decision rules and examples
+- inspect auth_get_permissions when access is unclear
+- in server_policy mode, permissions live on the server and writes use the same JWT
 """
 
 
@@ -46,7 +48,12 @@ Safety principles:
 - treat Gmail trash as a mutation even though it is reversible
 - search Drive before mutating when the user did not provide a file ID
 - Drive prepare_* tools do not execute mutations; confirm_* tools do
-- production writes require the exact tool in the signed approved_tools claim
+- server_policy writes require persistent read_write access for the authenticated identity
+- only legacy jwt_claims mode uses the signed approved_tools claim
+- a clear user request may authorize the full prepare/confirm workflow
+- requires_confirmation means a technical call; use confirmation_tool and confirmation_arguments
+- clarify ambiguity or a scope change in the preview before confirming
+- respect the agent client's own approval policy
 - preparation is not proof of human consent
 - never repeat an operation with an uncertain external outcome
 
@@ -89,6 +96,8 @@ How to react:
 - google_operation_outcome_unknown: inspect the Google resource; never repeat operation_id or automatically prepare another write
 - auth_provider_unavailable: wait for the JWT key provider; do not bypass authentication
 - internal_error: stop and report the server problem
+- permission_denied: ask the server administrator to enable access; do not renew JWT or ask for another chat approval
+- approval_required: legacy jwt_claims authorization only; ask the token issuer to authorize the tool
 
 Domain-specific recovery:
 - Calendar recurrence problems: use event.recurrence with RRULE
@@ -148,6 +157,7 @@ Decision rules:
 - use tasks_complete_task when the intent is to finish or mark done
 - use tasks_delete_task only for explicit removal
 - use tasks_delete_tasklist only for explicit removal of the entire list
+- after an explicit removal request, review the preview and execute its confirmation_tool with confirmation_arguments
 """
 
 

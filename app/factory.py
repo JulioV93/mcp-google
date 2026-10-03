@@ -16,11 +16,11 @@ from app.errors import AppError, InternalError, ValidationError
 from app.logging import configure_logging
 from app.mcp_server import mcp
 from app.oauth.callback_page import callback_page
+from app.security.authorization import authorize_tool
 from app.security.middleware import JWTAuthMiddleware, MCPBodyLimitMiddleware
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
 from app.services.maintenance import maintenance_lifespan
-from app.tool_runtime import ensure_tool_approval
 
 logger = logging.getLogger(__name__)
 
@@ -182,8 +182,13 @@ def create_app() -> Starlette:
             audit_service = AuditService(session)
             service = AuthService(session, settings)
             try:
-                ensure_tool_approval(
-                    tool_name="auth_google_disconnect", approved_tools=context.approvals
+                authorize_tool(
+                    session,
+                    settings=settings,
+                    subject=subject,
+                    tenant_id=tenant_id,
+                    tool_name="auth_google_disconnect",
+                    approved_tools=context.approvals,
                 )
                 disconnected = service.disconnect_google(
                     external_subject=subject, tenant_id=tenant_id

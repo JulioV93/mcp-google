@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mcp-google"
-version = "0.1.0"
+version = "0.2.0"
 description = "Multi-user MCP server for Google Calendar, Tasks, and Gmail"
 readme = "docs/README.md"
 requires-python = ">=3.11"

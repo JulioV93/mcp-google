@@ -1,5 +1,11 @@
 # Checklist de prerrequisitos para prueba real
 
+> Configuración actual: [permisos persistentes](23-permisos-persistentes.md).
+> En `server_policy`, habilitar `read_write` una vez y conservar el JWT; `permission_denied`
+> requiere un cambio administrativo. Las instrucciones de `approved_tools`,
+> `approval_required` y las variables antiguas de aprobación de esta guía describen
+> exclusivamente el modo heredado `jwt_claims`. La confirmación de operaciones es técnica.
+
 ## Objetivo
 
 Este checklist te ayuda a confirmar que ya tienes todo lo necesario antes de iniciar una prueba real del servidor MCP con Google Calendar, Google Tasks y Gmail.

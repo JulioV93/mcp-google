@@ -15,12 +15,13 @@ from app.schemas.tasks import (
     TasksUpdateTaskInput,
     TasksUpdateTasklistInput,
 )
+from app.security.tool_policy import tool_annotations
 from app.services.tasks_service import TasksService
 from app.tools.common import run_tool
 
 
 def register_tasks_tools(mcp: FastMCP) -> None:
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("tasks_list_tasklists"))
     def tasks_list_tasklists(
         max_results: int = 100, page_token: str | None = None
     ) -> dict[str, object]:
@@ -41,7 +42,7 @@ def register_tasks_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("tasks_create_tasklist"))
     def tasks_create_tasklist(title: str) -> dict[str, object]:
         """Create a Google task list.
 
@@ -60,7 +61,7 @@ def register_tasks_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("tasks_update_tasklist"))
     def tasks_update_tasklist(tasklist_id: str, title: str) -> dict[str, object]:
         """Update a Google task list.
 
@@ -79,7 +80,7 @@ def register_tasks_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("tasks_delete_tasklist"))
     def tasks_delete_tasklist(tasklist_id: str) -> dict[str, object]:
         """Prepare deletion of a Google task list.
 
@@ -99,7 +100,7 @@ def register_tasks_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("tasks_confirm_delete_tasklist"))
     def tasks_confirm_delete_tasklist(operation_id: str) -> dict[str, object]:
         """Confirm deletion of a prepared Google task list."""
         payload = TasksConfirmDeleteTasklistInput(operation_id=operation_id)
@@ -115,7 +116,7 @@ def register_tasks_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("tasks_list_tasks"))
     def tasks_list_tasks(
         tasklist_id: str,
         max_results: int = 100,
@@ -155,7 +156,7 @@ def register_tasks_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("tasks_create_task"))
     def tasks_create_task(
         tasklist_id: str, task: dict[str, object] | None = None
     ) -> dict[str, object]:
@@ -189,7 +190,7 @@ def register_tasks_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("tasks_update_task"))
     def tasks_update_task(
         tasklist_id: str, task_id: str, task: dict[str, object] | None = None
     ) -> dict[str, object]:
@@ -225,7 +226,7 @@ def register_tasks_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("tasks_complete_task"))
     def tasks_complete_task(
         tasklist_id: str, task_id: str, completed: str | None = None
     ) -> dict[str, object]:
@@ -256,7 +257,7 @@ def register_tasks_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("tasks_delete_task"))
     def tasks_delete_task(tasklist_id: str, task_id: str) -> dict[str, object]:
         """Prepare deletion of a Google task.
 
@@ -284,7 +285,7 @@ def register_tasks_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("tasks_confirm_delete_task"))
     def tasks_confirm_delete_task(operation_id: str) -> dict[str, object]:
         """Confirm deletion of a prepared Google task."""
         payload = TasksConfirmDeleteTaskInput(operation_id=operation_id)

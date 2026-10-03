@@ -13,12 +13,13 @@ from app.schemas.gmail import (
     GmailSendEmailInput,
     GmailUpdateDraftInput,
 )
+from app.security.tool_policy import tool_annotations
 from app.services.gmail_service import GmailService
 from app.tools.common import run_tool
 
 
 def register_gmail_tools(mcp: FastMCP) -> None:
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("gmail_list_messages"))
     def gmail_list_messages(
         query: str | None = None,
         max_results: int = 20,
@@ -51,7 +52,7 @@ def register_gmail_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("gmail_get_message"))
     def gmail_get_message(message_id: str) -> dict[str, object]:
         """Get a Gmail message by ID.
 
@@ -70,7 +71,7 @@ def register_gmail_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("gmail_list_threads"))
     def gmail_list_threads(
         query: str | None = None,
         max_results: int = 20,
@@ -93,7 +94,7 @@ def register_gmail_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("gmail_create_draft"))
     def gmail_create_draft(message: dict[str, object] | None = None) -> dict[str, object]:
         """Create a Gmail draft.
 
@@ -124,7 +125,7 @@ def register_gmail_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("gmail_update_draft"))
     def gmail_update_draft(
         draft_id: str, message: dict[str, object] | None = None
     ) -> dict[str, object]:
@@ -147,7 +148,7 @@ def register_gmail_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("gmail_delete_draft"))
     def gmail_delete_draft(draft_id: str) -> dict[str, object]:
         """Delete a Gmail draft.
 
@@ -166,7 +167,7 @@ def register_gmail_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("gmail_send_email"))
     def gmail_send_email(message: dict[str, object] | None = None) -> dict[str, object]:
         """Prepare sending an email through Gmail.
 
@@ -198,7 +199,7 @@ def register_gmail_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("gmail_confirm_send_email"))
     def gmail_confirm_send_email(operation_id: str) -> dict[str, object]:
         """Confirm sending a prepared Gmail email.
 
@@ -217,7 +218,7 @@ def register_gmail_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("gmail_delete_message"))
     def gmail_delete_message(message_id: str) -> dict[str, object]:
         """Move a Gmail message to trash.
 

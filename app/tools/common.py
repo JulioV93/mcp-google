@@ -5,16 +5,33 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+from app.config import get_settings
 from app.context.request_context import maybe_get_request_context
 from app.errors import AppError, UnauthorizedError
-from app.tool_runtime import audited_call, ensure_tool_approval
+from app.security.authorization import authorize_tool
+from app.security.tool_policy import tool_annotations
+from app.tool_runtime import audited_call
 
 
 def register_ping_tool(mcp: FastMCP, *, server_name: str, server_version: str) -> None:
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("ping"))
     def ping() -> dict[str, str]:
         """Return the current server status."""
         context = maybe_get_request_context()
+        if context is not None:
+            return run_tool(
+                tool_name="ping",
+                provider="google",
+                resource_type="server",
+                arguments={},
+                operation=lambda session, context: {
+                    "status": "ok",
+                    "server": server_name,
+                    "version": server_version,
+                    "subject": context.subject,
+                    "token_type": context.token_type,
+                },
+            )
         return {
             "status": "ok",
             "server": server_name,
@@ -41,7 +58,18 @@ def run_tool(
 ) -> dict[str, object]:
     context = require_context()
     try:
-        ensure_tool_approval(tool_name=tool_name, approved_tools=context.approvals)
+
+        def authorized_operation(session):
+            authorize_tool(
+                session,
+                settings=get_settings(),
+                subject=context.subject,
+                tenant_id=context.tenant_id,
+                tool_name=tool_name,
+                approved_tools=context.approvals,
+            )
+            return operation(session, context)
+
         return audited_call(
             external_subject=context.subject,
             tenant_id=context.tenant_id,
@@ -49,7 +77,7 @@ def run_tool(
             provider=provider,
             resource_type=resource_type,
             arguments=arguments,
-            operation=lambda session: operation(session, context),
+            operation=authorized_operation,
         )
     except AppError as exc:
         raise exc.to_tool_error() from exc

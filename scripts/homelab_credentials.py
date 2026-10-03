@@ -1,6 +1,7 @@
 """Local administrator utility. Credentials are written to files, never printed."""
 
 import argparse
+import json
 import os
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -30,6 +31,14 @@ def main() -> None:
     )
     issue.add_argument("--approve-tool", action="append", default=[], choices=sorted(WRITE_TOOLS))
     issue.add_argument("--output", type=Path, required=True)
+    for action in ("get-access", "set-access"):
+        access = commands.add_parser(action, help="Inspect or provision persistent identity access")
+        access.add_argument("--subject", required=True)
+        access.add_argument("--tenant-id")
+        if action == "set-access":
+            access.add_argument(
+                "--profile", required=True, choices=["read_only", "read_write", "disabled"]
+            )
     args = parser.parse_args()
 
     if args.action == "init":
@@ -52,6 +61,45 @@ def main() -> None:
         parser.error("Tenant must be nonempty and at most 255 characters")
     load_dotenv(args.env, override=True)
     settings = Settings(_env_file=None)
+    if args.action in {"get-access", "set-access"}:
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import Session
+
+        from app.db.repositories.users import UserRepository
+        from app.services.audit_service import AuditService
+
+        engine = create_engine(settings.database_url)
+        try:
+            with Session(engine) as session:
+                users = UserRepository(session)
+                user = users.get_by_external_subject(args.subject, args.tenant_id)
+                previous = user.access_profile if user else "read_only"
+                if args.action == "set-access":
+                    user = user or users.create(args.subject, args.tenant_id)
+                    user.access_profile = args.profile
+                    # Policy and its administrative audit are committed atomically.
+                    AuditService(session).record_tool_call(
+                        external_subject=args.subject,
+                        tenant_id=args.tenant_id,
+                        tool_name="admin_set_access",
+                        provider="local",
+                        resource_type="authorization",
+                        arguments={"previous_profile": previous, "access_profile": args.profile},
+                        result_status="success",
+                    )
+                print(
+                    json.dumps(
+                        {
+                            "subject": args.subject,
+                            "tenant_id": args.tenant_id,
+                            "access_profile": user.access_profile if user else "read_only",
+                            "provisioned": user is not None,
+                        }
+                    )
+                )
+        finally:
+            engine.dispose()
+        return
     if settings.jwt_test_mode or settings.jwt_algorithm_list != ["HS256"]:
         parser.error("Use JWT_TEST_MODE=false and JWT_ALGORITHMS=HS256")
     if not settings.jwt_shared_secret or len(settings.jwt_shared_secret.encode()) < 32:

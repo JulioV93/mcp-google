@@ -30,6 +30,7 @@ os.environ.update(
     GOOGLE_CLIENT_ID="test-client.apps.googleusercontent.com",
     GOOGLE_CLIENT_SECRET="test-only-not-a-real-secret",
     REQUIRE_EXPLICIT_APPROVAL="false",
+    AUTHORIZATION_MODE="jwt_claims",
     APPROVAL_REQUIRED_TOOLS=Settings.model_fields["approval_required_tools"].default,
     GOOGLE_OAUTH_SCOPES=Settings.model_fields["google_oauth_scopes"].default,
 )

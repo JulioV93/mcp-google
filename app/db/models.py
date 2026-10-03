@@ -3,7 +3,16 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -28,12 +37,19 @@ class User(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     external_subject: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    access_profile: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="read_only", server_default="read_only"
+    )
     tenant_id: Mapped[str] = mapped_column(
         String(255), nullable=False, default="", server_default="", index=True
     )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "external_subject", name="uq_users_tenant_subject"),
+        CheckConstraint(
+            "access_profile IN ('read_only', 'read_write', 'disabled')",
+            name="ck_users_access_profile",
+        ),
     )
 
     google_connection: Mapped[GoogleConnection | None] = relationship(

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from typing import Literal, cast
 from urllib.parse import urlparse
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.security.tool_policy import WRITE_TOOLS
 
 
 class Settings(BaseSettings):
@@ -35,6 +38,9 @@ class Settings(BaseSettings):
     rate_limit_rpm: int = Field(default=120, ge=1, validation_alias="RATE_LIMIT_RPM")
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     log_json: bool = Field(default=False, validation_alias="LOG_JSON")
+    authorization_mode: Literal["server_policy", "jwt_claims"] = Field(
+        default="jwt_claims", validation_alias="AUTHORIZATION_MODE"
+    )
     require_explicit_approval: bool = Field(
         default=False, validation_alias="REQUIRE_EXPLICIT_APPROVAL"
     )
@@ -79,7 +85,7 @@ class Settings(BaseSettings):
         validation_alias="MCP_SERVER_NAME",
     )
     mcp_server_version: str = Field(
-        default="0.1.0",
+        default="0.2.0",
         validation_alias="MCP_SERVER_VERSION",
     )
     mcp_path: str = Field(default="/mcp", validation_alias="MCP_PATH")
@@ -166,6 +172,13 @@ class Settings(BaseSettings):
         from cryptography.hazmat.primitives.serialization import load_pem_public_key
 
         env = self.environment
+        if (
+            self.authorization_mode == "server_policy"
+            and {"require_explicit_approval", "approval_required_tools"} & self.model_fields_set
+        ):
+            logging.getLogger(__name__).warning(
+                "Legacy approval settings are deprecated and ignored in server_policy mode"
+            )
         if self.jwt_test_mode and env != "development":
             raise ValueError("JWT_TEST_MODE is only allowed in development")
         if not self.jwt_issuer.strip() or not self.jwt_audience.strip():
@@ -218,8 +231,9 @@ class Settings(BaseSettings):
                 if value and (urlparse(value).scheme != "https" or not urlparse(value).hostname):
                     raise ValueError("OAuth and JWKS URLs require HTTPS outside development")
         if env == "production":
-            if not self.require_explicit_approval or not WRITE_TOOLS <= set(
-                self.approval_required_tool_list
+            if self.authorization_mode == "jwt_claims" and (
+                not self.require_explicit_approval
+                or not WRITE_TOOLS <= set(self.approval_required_tool_list)
             ):
                 raise ValueError("Production requires approval for every write tool")
             if (
@@ -276,6 +290,3 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
-
-
-WRITE_TOOLS = frozenset(Settings.model_fields["approval_required_tools"].default.split(","))

@@ -1,5 +1,11 @@
 # Validacion manual con Google real
 
+> Configuración actual: [permisos persistentes](23-permisos-persistentes.md).
+> En `server_policy`, habilitar `read_write` una vez y conservar el JWT; `permission_denied`
+> requiere un cambio administrativo. Las instrucciones de `approved_tools`,
+> `approval_required` y las variables antiguas de aprobación de esta guía describen
+> exclusivamente el modo heredado `jwt_claims`. La confirmación de operaciones es técnica.
+
 ## Objetivo
 
 Esta guia describe un flujo completo para validar manualmente el servidor MCP contra una cuenta Google real, usando credenciales OAuth verdaderas y un cliente MCP autenticado.

@@ -78,6 +78,10 @@ def test_existing_data_migrates_without_plaintext_or_lost_identity(tmp_path, mon
         with engine.connect() as conn:
             users = conn.execute(text("SELECT id,tenant_id FROM users ORDER BY id")).all()
             assert users == [(1, ""), (2, "tenant-a")]
+            assert conn.execute(text("SELECT access_profile FROM users ORDER BY id")).all() == [
+                ("read_only",),
+                ("read_only",),
+            ]
             assert conn.execute(
                 text(
                     "SELECT access_token_encrypted,refresh_token_encrypted FROM google_connections"

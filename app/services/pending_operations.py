@@ -62,6 +62,8 @@ def _preview_from_record(
         },
         "expires_at": record.expires_at.isoformat(),
         "requires_confirmation": True,
+        "confirmation_tool": _confirm_tool_name(record.operation_type),
+        "confirmation_arguments": {"operation_id": record.operation_key},
         "risk_level": risk_level,
         "safety_level": "destructive" if risk_level in {"high", "critical"} else "write",
         "human_summary": f"Prepared {record.operation_type} for confirmation.",

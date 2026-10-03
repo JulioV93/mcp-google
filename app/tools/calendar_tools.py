@@ -10,12 +10,13 @@ from app.schemas.calendar import (
     CalendarListEventsInput,
     CalendarUpdateEventInput,
 )
+from app.security.tool_policy import tool_annotations
 from app.services.calendar_service import CalendarService
 from app.tools.common import run_tool
 
 
 def register_calendar_tools(mcp: FastMCP) -> None:
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("calendar_list_calendars"))
     def calendar_list_calendars() -> dict[str, object]:
         """List Google calendars for the current user.
 
@@ -33,7 +34,7 @@ def register_calendar_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("calendar_list_events"))
     def calendar_list_events(
         calendar_id: str = "primary",
         time_min: str | None = None,
@@ -77,7 +78,7 @@ def register_calendar_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("calendar_get_event"))
     def calendar_get_event(calendar_id: str = "primary", event_id: str = "") -> dict[str, object]:
         """Get a Google Calendar event by ID.
 
@@ -97,7 +98,7 @@ def register_calendar_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("calendar_create_event"))
     def calendar_create_event(
         calendar_id: str = "primary", event: dict[str, object] | None = None
     ) -> dict[str, object]:
@@ -139,7 +140,7 @@ def register_calendar_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("calendar_update_event"))
     def calendar_update_event(
         calendar_id: str = "primary",
         event_id: str = "",
@@ -178,7 +179,7 @@ def register_calendar_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("calendar_delete_event"))
     def calendar_delete_event(
         calendar_id: str = "primary", event_id: str = ""
     ) -> dict[str, object]:
@@ -208,7 +209,7 @@ def register_calendar_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("calendar_confirm_delete_event"))
     def calendar_confirm_delete_event(operation_id: str) -> dict[str, object]:
         """Confirm deletion of a prepared Google Calendar event.
 

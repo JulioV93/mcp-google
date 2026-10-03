@@ -23,7 +23,8 @@ Servidor MCP remoto en Python para integrar Google Calendar, Google Tasks, Gmail
 - navegacion, lectura, exportacion, permisos y operaciones confirmadas para Drive
 - auditoria basica
 - rate limiting basico
-- aprobacion explicita opcional para tools sensibles
+- permisos persistentes por usuario; escrituras con el mismo JWT
+- preparacion/confirmacion tecnica para operaciones sensibles
 
 ## Estructura principal
 
@@ -81,10 +82,16 @@ Esto levanta:
 - `ALLOWED_ORIGINS`
 - `RATE_LIMIT_ENABLED`
 - `RATE_LIMIT_RPM`
+- `AUTHORIZATION_MODE` (`server_policy` en plantillas nuevas; `jwt_claims` por compatibilidad)
 - `REQUIRE_EXPLICIT_APPROVAL`
 - `APPROVAL_REQUIRED_TOOLS`
 
 ## Flujo basico de prueba
+
+En `server_policy`, habilitar la identidad una vez con
+`python -m scripts.homelab_credentials --env .env set-access --subject IDENTIDAD --profile read_write`.
+Consultar `auth_get_permissions` desde el agente. La misma identidad conserva su JWT al crear,
+editar y borrar. Ver [permisos persistentes y migración](docs/23-permisos-persistentes.md).
 
 1. levantar el servidor
 2. probar `/health`
