@@ -73,6 +73,8 @@ def audited_call(
 
 def ensure_tool_approval(*, tool_name: str, approved_tools: tuple[str, ...]) -> None:
     settings = get_settings()
+    if settings.authorization_mode == "server_policy":
+        return
     if not settings.require_explicit_approval:
         return
     if tool_name not in settings.approval_required_tool_list:

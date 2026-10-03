@@ -26,12 +26,13 @@ from app.schemas.drive import (
     DriveSearchFilesInput,
     DriveUpdateMetadataInput,
 )
+from app.security.tool_policy import tool_annotations
 from app.services.drive_service import DriveService
 from app.tools.common import run_tool
 
 
 def register_drive_tools(mcp: FastMCP) -> None:
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_list_files"))
     def drive_list_files(
         page_size: int = 20,
         page_token: str | None = None,
@@ -60,7 +61,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_search_files"))
     def drive_search_files(
         query: str | None = None,
         name: str | None = None,
@@ -105,7 +106,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_get_file"))
     def drive_get_file(file_id: str) -> dict[str, object]:
         """Get Drive file metadata by ID.
 
@@ -124,7 +125,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_find_folder_by_name"))
     def drive_find_folder_by_name(
         name: str,
         exact: bool = True,
@@ -169,7 +170,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_find_file_by_name"))
     def drive_find_file_by_name(
         name: str,
         file_type: str = "any",
@@ -216,7 +217,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_search_files_advanced"))
     def drive_search_files_advanced(
         terms: list[str],
         mime_types: list[str] | None = None,
@@ -266,7 +267,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_list_permissions"))
     def drive_list_permissions(file_id: str) -> dict[str, object]:
         """List Drive permissions for a file.
 
@@ -285,7 +286,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_download_file"))
     def drive_download_file(file_id: str) -> dict[str, object]:
         """Download a non-native Drive file as base64 content.
 
@@ -305,7 +306,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_export_file"))
     def drive_export_file(file_id: str, export_mime_type: str) -> dict[str, object]:
         """Export a native Google Workspace file to a supported format.
 
@@ -332,7 +333,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_create_folder"))
     def drive_create_folder(name: str, parent_id: str | None = None) -> dict[str, object]:
         """Create a Drive folder.
 
@@ -351,7 +352,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_create_google_doc"))
     def drive_create_google_doc(name: str, parent_id: str | None = None) -> dict[str, object]:
         """Create a native Google Doc in Drive.
 
@@ -370,7 +371,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_create_google_sheet"))
     def drive_create_google_sheet(name: str, parent_id: str | None = None) -> dict[str, object]:
         """Create a native Google Sheet in Drive.
 
@@ -389,7 +390,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_create_google_slide"))
     def drive_create_google_slide(name: str, parent_id: str | None = None) -> dict[str, object]:
         """Create a native Google Slides presentation in Drive.
 
@@ -408,7 +409,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_create_shortcut"))
     def drive_create_shortcut(
         name: str, target_file_id: str, parent_id: str | None = None
     ) -> dict[str, object]:
@@ -431,7 +432,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_update_metadata"))
     def drive_update_metadata(
         file_id: str,
         name: str | None = None,
@@ -454,7 +455,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_move_file"))
     def drive_move_file(
         file_id: str,
         add_parent_id: str | None = None,
@@ -480,7 +481,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_prepare_upload"))
     def drive_prepare_upload(
         name: str, content: dict[str, object], parent_id: str | None = None
     ) -> dict[str, object]:
@@ -514,7 +515,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_confirm_upload"))
     def drive_confirm_upload(operation_id: str) -> dict[str, object]:
         """Confirm a prepared Drive upload operation.
 
@@ -540,7 +541,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_prepare_save_file"))
     def drive_prepare_save_file(file_id: str, content: dict[str, object]) -> dict[str, object]:
         """Prepare a sensitive Drive file content save operation.
 
@@ -559,7 +560,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_prepare_write_google_doc"))
     def drive_prepare_write_google_doc(
         file_id: str, content_text: str, mode: str = "replace"
     ) -> dict[str, object]:
@@ -591,7 +592,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_confirm_write_google_doc"))
     def drive_confirm_write_google_doc(operation_id: str) -> dict[str, object]:
         """Confirm a prepared write operation for a native Google Doc."""
         payload = DriveConfirmOperationInput(operation_id=operation_id)
@@ -607,7 +608,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_prepare_write_google_sheet"))
     def drive_prepare_write_google_sheet(
         file_id: str,
         values: list[list[str | int | float | bool | None]],
@@ -654,7 +655,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_confirm_write_google_sheet"))
     def drive_confirm_write_google_sheet(operation_id: str) -> dict[str, object]:
         """Confirm a prepared write operation for a native Google Sheet."""
         payload = DriveConfirmOperationInput(operation_id=operation_id)
@@ -670,7 +671,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_prepare_upload_markdown"))
     def drive_prepare_upload_markdown(
         name: str, content_markdown: str, parent_id: str | None = None
     ) -> dict[str, object]:
@@ -700,7 +701,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_confirm_save_file"))
     def drive_confirm_save_file(operation_id: str) -> dict[str, object]:
         """Confirm a prepared Drive file save operation.
 
@@ -719,7 +720,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_prepare_delete_file"))
     def drive_prepare_delete_file(file_id: str, permanent: bool = False) -> dict[str, object]:
         """Prepare a sensitive Drive delete operation.
 
@@ -738,7 +739,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_confirm_delete_file"))
     def drive_confirm_delete_file(operation_id: str) -> dict[str, object]:
         """Confirm a prepared Drive delete operation.
 
@@ -757,7 +758,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_prepare_share_file"))
     def drive_prepare_share_file(file_id: str, permission: dict[str, object]) -> dict[str, object]:
         """Prepare a sensitive Drive sharing operation.
 
@@ -778,7 +779,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_confirm_share_file"))
     def drive_confirm_share_file(operation_id: str) -> dict[str, object]:
         """Confirm a prepared Drive sharing operation.
 
@@ -797,7 +798,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_prepare_revoke_permission"))
     def drive_prepare_revoke_permission(file_id: str, permission_id: str) -> dict[str, object]:
         """Prepare a sensitive Drive permission revocation operation.
 
@@ -816,7 +817,7 @@ def register_drive_tools(mcp: FastMCP) -> None:
             ),
         )
 
-    @mcp.tool
+    @mcp.tool(annotations=tool_annotations("drive_confirm_revoke_permission"))
     def drive_confirm_revoke_permission(operation_id: str) -> dict[str, object]:
         """Confirm a prepared Drive permission revocation operation.
 

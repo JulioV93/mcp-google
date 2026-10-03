@@ -353,6 +353,19 @@ class DriveContentTooLargeError(AppError):
         )
 
 
+class PermissionDeniedError(AppError):
+    def __init__(self, *, tool_name: str, access_profile: str) -> None:
+        super().__init__(
+            "permission_denied",
+            "Server policy does not allow this action for the current identity",
+            status_code=403,
+            retryable=False,
+            category="authorization",
+            metadata={"tool_name": tool_name, "access_profile": access_profile},
+            hint="Ask the server administrator to enable access; chat confirmation cannot grant it.",
+        )
+
+
 class ApprovalRequiredError(AppError):
     def __init__(self, detail: str) -> None:
         super().__init__(

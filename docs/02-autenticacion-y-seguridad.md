@@ -38,7 +38,15 @@ Nunca se debe aceptar `user_id`, `external_subject` o `google_email` desde los a
 
 ### Aprobaciones explícitas
 
-En producción toda escritura requiere el nombre exacto de la herramienta en `approved_tools`, incluidas confirmaciones y desconexión HTTP/MCP. Una política incompleta impide arrancar. Preparaciones, lecturas e inicio OAuth no requieren aprobación adicional. La claim es autorización administrativa; no demuestra consentimiento humano ni sustituye la confirmación del payload.
+En `AUTHORIZATION_MODE=server_policy`, las escrituras y preparaciones requieren el perfil
+persistente `read_write` de la identidad `(tenant_id, sub)`. El JWT autentica y se conserva;
+`approved_tools` y las variables antiguas de aprobación se ignoran. Los perfiles `read_only`
+y `disabled` permiten restringir o revocar el acceso desde el servidor.
+
+Sólo en el modo de compatibilidad `jwt_claims`, producción exige el nombre exacto de cada
+escritura en `approved_tools`. La claim es autorización administrativa, no prueba de consentimiento.
+La petición explícita del usuario puede autorizar el flujo técnico completo. Ver
+[permisos persistentes](23-permisos-persistentes.md) para migración y administración.
 
 ## OAuth Google por usuario
 

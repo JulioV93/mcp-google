@@ -118,6 +118,8 @@ AUDIT_ARGUMENT_KEYS = frozenset(
         "include_trashed",
         "show_completed",
         "show_hidden",
+        "previous_profile",
+        "access_profile",
     }
 )
 

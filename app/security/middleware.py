@@ -7,15 +7,42 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.config import get_settings
 from app.context.request_context import reset_request_context, set_request_context
-from app.errors import AppError, OriginNotAllowedError, RateLimitedError, UnauthorizedError
+from app.db.session import SessionLocal
+from app.errors import (
+    AppError,
+    InternalError,
+    OriginNotAllowedError,
+    RateLimitedError,
+    UnauthorizedError,
+)
+from app.security.authorization import ensure_active_identity
 from app.security.jwt_auth import (
     JWTAuthenticationError,
     JWTProviderUnavailableError,
     authenticate_request,
 )
 from app.security.rate_limit import InMemoryRateLimiter, RateLimitExceededError
+from app.services.audit_service import AuditService
 
 logger = logging.getLogger(__name__)
+
+
+def check_identity_access(context) -> None:
+    with SessionLocal() as session:
+        try:
+            ensure_active_identity(session, subject=context.subject, tenant_id=context.tenant_id)
+        except AppError as exc:
+            AuditService(session).safe_record_tool_call(
+                external_subject=context.subject,
+                tenant_id=context.tenant_id,
+                tool_name="authenticated_access",
+                provider="google",
+                resource_type="authorization",
+                arguments={},
+                result_status="error",
+                error_code=exc.code,
+            )
+            raise
 
 
 class JWTAuthMiddleware:
@@ -61,6 +88,17 @@ class JWTAuthMiddleware:
                 category="auth",
             )
             await JSONResponse(error.to_dict(), status_code=503)(scope, receive, send)
+            return
+
+        try:
+            await run_in_threadpool(check_identity_access, principal.context)
+        except AppError as exc:
+            await JSONResponse(exc.to_dict(), status_code=exc.status_code)(scope, receive, send)
+            return
+        except Exception:  # noqa: BLE001 - authorization must fail closed without leaking database details
+            logger.error("Could not resolve identity authorization")
+            error = InternalError()
+            await JSONResponse(error.to_dict(), status_code=500)(scope, receive, send)
             return
 
         if self.settings.rate_limit_enabled:
