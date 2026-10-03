@@ -4,6 +4,9 @@ Este directorio separa la planificacion acordada para el servidor MCP multiusuar
 
 ## Archivos
 
+- [Permisos persistentes](23-permisos-persistentes.md): contrato actual, administración y migración.
+- [Validación 0.2.0](24-validacion-permisos-2026-10-02.md): pruebas y estado de publicación/despliegue.
+
 - `docs/01-resumen-y-arquitectura.md`: alcance, enfoque tecnico y arquitectura general.
 - `docs/02-autenticacion-y-seguridad.md`: modelo de identidad, OAuth Google, JWT del cliente y controles de seguridad.
 - `docs/03-modelo-de-datos-y-tools.md`: entidades principales, tools MCP y comportamiento por servicio.
