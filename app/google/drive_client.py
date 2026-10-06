@@ -179,6 +179,7 @@ class DriveClient(GoogleApiClientBase):
         mode: str,
         tenant_id: str | None = None,
     ) -> dict[str, object]:
+        self.session.info["diagnostic_stage"] = "docs_read_document"
         service = self._docs_service(external_subject=external_subject, tenant_id=tenant_id)
         document = self._execute(service.documents().get(documentId=file_id))
         body_content = (
@@ -209,6 +210,7 @@ class DriveClient(GoogleApiClientBase):
             if mode == "append" and insert_index > 1 and not content_text.startswith("\n"):
                 content_text = "\n" + content_text
         requests.append({"insertText": {"location": {"index": insert_index}, "text": content_text}})
+        self.session.info["diagnostic_stage"] = "docs_batch_update"
         return self._execute(
             service.documents().batchUpdate(
                 documentId=file_id,

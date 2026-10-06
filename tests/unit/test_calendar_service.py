@@ -14,6 +14,7 @@ from app.schemas.calendar import (
     CalendarDeleteEventInput,
     CalendarEventDateTime,
     CalendarEventInput,
+    CalendarEventPatchInput,
     CalendarEventReminderOverride,
     CalendarEventReminders,
     CalendarListEventsInput,
@@ -161,7 +162,7 @@ def test_update_event_passes_recurrence_and_reminders() -> None:
     payload = CalendarUpdateEventInput(
         calendar_id="primary",
         event_id="evt-3",
-        event=CalendarEventInput(
+        event=CalendarEventPatchInput(
             summary="Morning Routine",
             colorId="3",
             start=CalendarEventDateTime(dateTime="2026-03-14T08:00:00-03:00"),

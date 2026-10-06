@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class CalendarEventDateTime(BaseModel):
@@ -69,6 +69,25 @@ class CalendarEventInput(BaseModel):
     )
 
 
+class CalendarEventPatchInput(CalendarEventInput):
+    summary: str | None = None
+    start: CalendarEventDateTime | None = None
+    end: CalendarEventDateTime | None = None
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def reject_null(cls, value):
+        if value is None:
+            raise ValueError("Omit unchanged fields; null is not supported")
+        return value
+
+    @model_validator(mode="after")
+    def require_change(self):
+        if not self.model_fields_set:
+            raise ValueError("At least one event field is required")
+        return self
+
+
 class CalendarListEventsInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -99,7 +118,7 @@ class CalendarUpdateEventInput(BaseModel):
 
     calendar_id: str = "primary"
     event_id: str
-    event: CalendarEventInput
+    event: CalendarEventPatchInput
 
 
 class CalendarDeleteEventInput(BaseModel):

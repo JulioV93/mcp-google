@@ -595,8 +595,10 @@ class DriveService:
             content_text=content_text,
             mode=mode,
         )
+        self.session.info["diagnostic_stage"] = "docs_persist_confirmation"
         self.pending_operations.mark_confirmed(record)
         self.session.commit()
+        self.session.info["diagnostic_stage"] = "docs_read_metadata"
         metadata = self.get_file(
             external_subject=external_subject,
             input_data=DriveGetFileInput(file_id=file_id),

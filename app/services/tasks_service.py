@@ -250,7 +250,7 @@ class TasksService:
             tenant_id=tenant_id,
             tasklist_id=input_data.tasklist_id,
             task_id=input_data.task_id,
-            task_body=input_data.task.model_dump(exclude_none=True),
+            task_body=input_data.task.model_dump(exclude_unset=True),
         )
         normalized = _normalize_task(payload, input_data.tasklist_id)
         return enrich_resource(

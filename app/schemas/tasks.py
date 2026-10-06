@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+import re
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class TaskListTitleInput(BaseModel):
@@ -24,6 +28,37 @@ class TaskInput(BaseModel):
     status: str | None = Field(
         default=None, description="Google Tasks status such as needsAction or completed."
     )
+
+
+class TaskPatchInput(TaskInput):
+    title: str | None = Field(default=None, min_length=1)
+    status: Literal["needsAction", "completed"] | None = None
+
+    @field_validator("title", "notes", "status", mode="before")
+    @classmethod
+    def reject_null(cls, value):
+        if value is None:
+            raise ValueError("Null is only supported for due")
+        return value
+
+    @field_validator("due")
+    @classmethod
+    def validate_due(cls, value):
+        if value is None:
+            return value
+        if not re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})",
+            value,
+        ):
+            raise ValueError("Expected RFC3339 with timezone")
+        datetime.fromisoformat(value.upper())
+        return value
+
+    @model_validator(mode="after")
+    def require_change(self):
+        if not self.model_fields_set:
+            raise ValueError("At least one task field is required")
+        return self
 
 
 class TasksListTasklistsInput(BaseModel):
@@ -70,7 +105,7 @@ class TasksUpdateTaskInput(TaskListRefInput):
     model_config = ConfigDict(extra="forbid")
 
     task_id: str = Field(min_length=1, description="Task ID within the selected task list.")
-    task: TaskInput
+    task: TaskPatchInput
 
 
 class TasksCompleteTaskInput(TaskListRefInput):

@@ -7,6 +7,7 @@ from typing import Any
 from app.config import get_settings
 from app.db.session import SessionLocal
 from app.errors import AppError, ApprovalRequiredError, InternalError
+from app.logging import record_operation_failure
 from app.services.audit_service import AuditService
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ def audited_call(
     operation: Callable[[Any], dict[str, object]],
 ) -> dict[str, object]:
     with SessionLocal() as session:
+        session.info["diagnostic_tool"] = tool_name
         audit_service = AuditService(session)
         try:
             result = operation(session)
@@ -50,6 +52,7 @@ def audited_call(
             )
             raise
         except Exception as exc:  # noqa: BLE001 - boundary prevents leakage or repetition of external writes
+            record_operation_failure(session, exc)
             session.rollback()
             logger.error("Unexpected tool failure (%s, %s)", tool_name, type(exc).__name__)
             audit_service.safe_record_tool_call(
