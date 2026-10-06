@@ -160,7 +160,7 @@ class CalendarService:
             tenant_id=tenant_id,
             calendar_id=input_data.calendar_id,
             event_id=input_data.event_id,
-            event_body=input_data.event.model_dump(by_alias=True, exclude_none=True),
+            event_body=input_data.event.model_dump(by_alias=True, exclude_unset=True),
         )
         normalized = _normalize_event(payload, input_data.calendar_id)
         return enrich_resource(

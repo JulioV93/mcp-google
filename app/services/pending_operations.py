@@ -20,6 +20,7 @@ from app.errors import (
     PendingOperationNotFoundError,
     PendingPayloadMismatchError,
 )
+from app.logging import record_operation_failure
 from app.services.connection_service import ConnectionService
 
 
@@ -176,6 +177,7 @@ def confirmed_operation(function):
             operation_id = session.info.get("claimed_operation")
             if operation_id is None:
                 raise
+            diagnostic_id = record_operation_failure(session, exc)
             session.rollback()
             # Only definitive provider rejections prove that the write did not happen.
             definitive = isinstance(exc, AppError) and exc.status_code in {400, 401, 403, 404, 412}
@@ -194,10 +196,12 @@ def confirmed_operation(function):
                     )
                 )
                 session.commit()
-            except Exception:  # noqa: BLE001 - boundary prevents leakage or repetition of external writes
+            except Exception as persist_error:  # noqa: BLE001 - preserve safe failure diagnostics
+                session.info["diagnostic_stage"] = "persist_operation_outcome"
+                diagnostic_id = record_operation_failure(session, persist_error)
                 session.rollback()
                 logging.getLogger(__name__).error("Could not persist operation outcome")
-                raise OperationOutcomeUnknownError() from None
+                raise OperationOutcomeUnknownError(diagnostic_id) from None
             if not result.rowcount:
                 record = session.get(PendingGoogleOperation, operation_id)
                 if record is not None and record.status == "confirmed":
@@ -208,7 +212,7 @@ def confirmed_operation(function):
                         "metadata_unavailable": True,
                     }
             if not definitive and result.rowcount:
-                raise OperationOutcomeUnknownError() from None
+                raise OperationOutcomeUnknownError(diagnostic_id) from None
             raise
         finally:
             session.info.pop("claimed_operation", None)

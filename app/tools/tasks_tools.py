@@ -17,7 +17,7 @@ from app.schemas.tasks import (
 )
 from app.security.tool_policy import tool_annotations
 from app.services.tasks_service import TasksService
-from app.tools.common import run_tool
+from app.tools.common import run_tool, validate_tool_payload
 
 
 def register_tasks_tools(mcp: FastMCP) -> None:
@@ -175,7 +175,8 @@ def register_tasks_tools(mcp: FastMCP) -> None:
         }
         ```
         """
-        payload = TasksCreateTaskInput.model_validate(
+        payload = validate_tool_payload(
+            TasksCreateTaskInput,
             {"tasklist_id": tasklist_id, "task": task or {}}
         )
         return run_tool(
@@ -196,7 +197,10 @@ def register_tasks_tools(mcp: FastMCP) -> None:
     ) -> dict[str, object]:
         """Update a Google task.
 
-        Use for changing task title, notes, or due date.
+        Send only changed fields; title is not required for updates.
+        Omitted fields stay unchanged. Send due: null to remove the date, notes: "" to clear notes.
+        Dates must be RFC3339 with timezone; Google records the date, not the time.
+        Empty patches and null title/notes/status are invalid.
         If the user wants to mark a task done, prefer `tasks_complete_task`.
 
         Example payload:
@@ -211,7 +215,8 @@ def register_tasks_tools(mcp: FastMCP) -> None:
         }
         ```
         """
-        payload = TasksUpdateTaskInput.model_validate(
+        payload = validate_tool_payload(
+            TasksUpdateTaskInput,
             {"tasklist_id": tasklist_id, "task_id": task_id, "task": task or {}}
         )
         return run_tool(

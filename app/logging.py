@@ -6,6 +6,7 @@ import re
 import sys
 from collections.abc import Mapping
 from typing import Any, cast
+from uuid import uuid4
 
 REDACTED_KEYS = {
     "authorization",
@@ -132,3 +133,52 @@ def audit_arguments(arguments: object) -> dict[str, object]:
         for key, value in arguments.items()
         if key in AUDIT_ARGUMENT_KEYS and isinstance(value, (str, int, float, bool, type(None)))
     }
+
+
+_PROVIDER_REASONS = frozenset(
+    {
+        "dailylimitexceeded",
+        "quotaexceeded",
+        "ratelimitexceeded",
+        "userratelimitexceeded",
+        "autherror",
+        "forbidden",
+        "forbiddenfornonorganizer",
+        "insufficientpermissions",
+        "notfound",
+        "conflict",
+        "duplicate",
+        "conditionnotmet",
+        "backenderror",
+        "other",
+    }
+)
+
+
+def record_operation_failure(session, error: Exception) -> str:
+    """Record only server-controlled classifications, never exception messages or bodies."""
+    from app.errors import AppError
+
+    diagnostic_id = session.info.setdefault("diagnostic_id", uuid4().hex)
+    payload = {
+        "diagnostic_id": diagnostic_id,
+        "tool": session.info.get("diagnostic_tool", "google_operation"),
+        "stage": session.info.get("diagnostic_stage", "provider_request"),
+        "exception_type": type(error).__name__,
+    }
+    if isinstance(error, AppError):
+        payload["error_code"] = error.code
+        metadata = error.metadata or {}
+        status = metadata.get("provider_status_code")
+        if type(status) is int and 100 <= status <= 599:
+            payload["provider_status_code"] = status
+        reason = metadata.get("provider_reason")
+        if isinstance(reason, str):
+            payload["provider_reason"] = reason if reason.lower() in _PROVIDER_REASONS else "other"
+    # Text logging also retains the safe payload; no configuration change is required.
+    logging.getLogger("app.google.diagnostics").warning(
+        "Google operation failure %s",
+        json.dumps(payload, ensure_ascii=True),
+        extra={"payload": payload},
+    )
+    return diagnostic_id

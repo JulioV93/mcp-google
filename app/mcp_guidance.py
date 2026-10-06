@@ -76,6 +76,10 @@ Good defaults:
 def error_handling_guide() -> str:
     return """Google MCP error handling guide
 
+Validation failures include safe field paths and error types in metadata.validation_errors.
+Correct the payload before retrying. Uncertain writes are never automatically retried.
+An uncertain error may include metadata.diagnostic_id for server-log correlation.
+
 Structured errors include:
 - error
 - detail
@@ -125,7 +129,10 @@ Decision rules:
 - use calendar_create_event for both one-off and recurring events
 - for recurring events, create one event and set event.recurrence with RRULE
 - Do not create multiple events to simulate a recurring schedule
-- use calendar_update_event to change an existing event by ID
+- use calendar_update_event to change an existing event by ID; send only changed fields
+- omitted event fields remain unchanged; summary/start/end are not mandatory for updates
+- null event fields are invalid; clear description/location with "" and recurrence with []
+- arrays in event updates replace the existing arrays
 - use calendar_delete_event only when the user explicitly wants removal
 
 Common recurrence mappings:
@@ -153,7 +160,11 @@ Primary tools:
 Decision rules:
 - list tasklists first if the user did not identify the task list
 - use tasks_create_task for new tasks with title, notes, or due date
-- use tasks_update_task for title, notes, or due date changes
+- use tasks_update_task for title, notes, or due date changes; send only changed fields
+- title is required for creation, not for updates; an update must contain at least one field
+- omitted fields remain unchanged; send due: null to remove a due date
+- dates must be RFC3339 with timezone; Google stores the date, not the time
+- clear notes with ""; null title/notes/status and unknown fields are invalid
 - use tasks_complete_task when the intent is to finish or mark done
 - use tasks_delete_task only for explicit removal
 - use tasks_delete_tasklist only for explicit removal of the entire list
@@ -245,6 +256,13 @@ Create a simple event:
   }
 }
 
+Update only an existing event description:
+{
+  "calendar_id": "primary",
+  "event_id": "evt-123",
+  "event": {"description": "Updated notes"}
+}
+
 Create a recurring weekday event:
 {
   "calendar_id": "primary",
@@ -293,14 +311,20 @@ Create a task:
   }
 }
 
-Update a task:
+Update only a task date (title is not required):
 {
   "tasklist_id": "abc",
   "task_id": "task-123",
   "task": {
-    "title": "Mi tarea actualizada",
-    "due": "2026-05-02T18:00:00.000Z"
+    "due": "2026-05-02T00:00:00.000Z"
   }
+}
+
+Remove an existing task due date:
+{
+  "tasklist_id": "abc",
+  "task_id": "task-123",
+  "task": {"due": null}
 }
 
 Complete a task:

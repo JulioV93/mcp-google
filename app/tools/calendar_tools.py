@@ -12,7 +12,7 @@ from app.schemas.calendar import (
 )
 from app.security.tool_policy import tool_annotations
 from app.services.calendar_service import CalendarService
-from app.tools.common import run_tool
+from app.tools.common import run_tool, validate_tool_payload
 
 
 def register_calendar_tools(mcp: FastMCP) -> None:
@@ -125,7 +125,8 @@ def register_calendar_tools(mcp: FastMCP) -> None:
         }
         ```
         """
-        payload = CalendarCreateEventInput.model_validate(
+        payload = validate_tool_payload(
+            CalendarCreateEventInput,
             {"calendar_id": calendar_id, "event": event or {}}
         )
         return run_tool(
@@ -148,7 +149,10 @@ def register_calendar_tools(mcp: FastMCP) -> None:
     ) -> dict[str, object]:
         """Update a Google Calendar event.
 
-        Use when the user wants to change an existing event and the `event_id` is known.
+        Send only changed fields when the `event_id` is known.
+        Summary/start/end are not required unless being changed. Omitted fields stay unchanged.
+        Use description/location: "" to clear text; recurrence: [] removes recurrence.
+        Arrays replace existing arrays. Empty patches and explicit null fields are invalid.
         If you need to locate the event first, use `calendar_list_events` before updating.
 
         Example payload:
@@ -164,7 +168,8 @@ def register_calendar_tools(mcp: FastMCP) -> None:
         }
         ```
         """
-        payload = CalendarUpdateEventInput.model_validate(
+        payload = validate_tool_payload(
+            CalendarUpdateEventInput,
             {"calendar_id": calendar_id, "event_id": event_id, "event": event or {}}
         )
         return run_tool(

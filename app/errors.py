@@ -205,6 +205,7 @@ class ValidationError(AppError):
         detail: str,
         *,
         hint: str | None = None,
+        metadata: dict[str, Any] | None = None,
         expected_fields: list[str] | None = None,
         example_payload: dict[str, Any] | None = None,
         recommended_tool: str | None = None,
@@ -215,6 +216,7 @@ class ValidationError(AppError):
             status_code=400,
             retryable=False,
             category="validation",
+            metadata=metadata,
             hint=hint,
             expected_fields=expected_fields,
             example_payload=example_payload,
@@ -389,12 +391,13 @@ class OriginNotAllowedError(AppError):
 
 
 class OperationOutcomeUnknownError(AppError):
-    def __init__(self) -> None:
+    def __init__(self, diagnostic_id: str | None = None) -> None:
         super().__init__(
             "google_operation_outcome_unknown",
             "The external result is uncertain; verify the resource before preparing another operation",
             status_code=409,
             retryable=False,
             category="provider",
+            metadata={"diagnostic_id": diagnostic_id} if diagnostic_id else None,
             hint="Do not repeat this operation_id. Inspect the Google resource first.",
         )

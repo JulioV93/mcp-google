@@ -11,6 +11,7 @@ from app.config import Settings, get_settings
 from app.errors import AppError, OperationOutcomeUnknownError, TemporaryProviderError
 from app.google.credentials import GoogleCredentialsProvider
 from app.google.errors import execute_google_media_request, execute_google_request
+from app.logging import record_operation_failure
 
 
 class GoogleApiClientBase:
@@ -45,12 +46,14 @@ class GoogleApiClientBase:
                 max_delay_seconds=self.settings.google_api_retry_max_delay_seconds,
             )
         except AppError as exc:
+            diagnostic_id = record_operation_failure(self.session, exc)
             if request.method != "GET" and (exc.retryable or exc.status_code >= 500):
-                raise OperationOutcomeUnknownError() from None
+                raise OperationOutcomeUnknownError(diagnostic_id) from None
             raise
-        except (OSError, httplib2.HttpLib2Error):
+        except (OSError, httplib2.HttpLib2Error) as exc:
+            diagnostic_id = record_operation_failure(self.session, exc)
             if request.method != "GET":
-                raise OperationOutcomeUnknownError() from None
+                raise OperationOutcomeUnknownError(diagnostic_id) from None
             raise TemporaryProviderError("Google transport unavailable") from None
 
     def _execute_operation(self, operation: Any) -> Any:
